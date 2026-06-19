@@ -1,4 +1,3 @@
-<!-- Модальне вікно для додавання паркінгу -->
 <div class="modal fade" id="addParkingModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -15,6 +14,10 @@
                     <div class="mb-3">
                         <label class="form-label">Адреса</label>
                         <input type="text" class="form-control" name="address" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Тариф (грн/год)</label>
+                        <input type="number" step="0.01" class="form-control" name="price_per_hour" value="0.00" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Місткість</label>
@@ -38,7 +41,6 @@
     </div>
 </div>
 
-<!-- Модальне вікно для редагування паркінгу -->
 <div class="modal fade" id="editParkingModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -56,6 +58,10 @@
                     <div class="mb-3">
                         <label class="form-label">Адреса</label>
                         <input type="text" class="form-control" name="address" id="editParkingAddress" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Тариф (грн/год)</label>
+                        <input type="number" step="0.01" class="form-control" name="price_per_hour" id="editParkingPrice" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Місткість</label>
@@ -79,7 +85,6 @@
     </div>
 </div>
 
-<!-- Модальне вікно для додавання транспорту -->
 <div class="modal fade" id="addVehicleModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -112,7 +117,7 @@
                             <?php 
                             $parkings_result->data_seek(0);
                             while($row = $parkings_result->fetch_assoc()): ?>
-                                <option value="<?php echo $row['id']; ?>"><?php echo $row['name']; ?></option>
+                                <option value="<?php echo $row['id']; ?>"><?php echo htmlspecialchars($row['name']); ?></option>
                             <?php endwhile; ?>
                         </select>
                     </div>
@@ -130,7 +135,6 @@
     </div>
 </div>
 
-<!-- Модальне вікно для редагування транспорту -->
 <div class="modal fade" id="editVehicleModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -164,7 +168,7 @@
                             <?php 
                             $parkings_result->data_seek(0);
                             while($row = $parkings_result->fetch_assoc()): ?>
-                                <option value="<?php echo $row['id']; ?>"><?php echo $row['name']; ?></option>
+                                <option value="<?php echo $row['id']; ?>"><?php echo htmlspecialchars($row['name']); ?></option>
                             <?php endwhile; ?>
                         </select>
                     </div>
@@ -182,7 +186,6 @@
     </div>
 </div>
 
-<!-- Модальне вікно для додавання бронювання -->
 <div class="modal fade" id="addBookingModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -195,11 +198,13 @@
                     <div class="mb-3">
                         <label class="form-label">Паркінг</label>
                         <select class="form-select" name="parking_id" id="bookingParkingId" required>
-                            <option value="">Оберіть паркінг</option>
+                            <option value="" data-price="0">Оберіть паркінг</option>
                             <?php 
                             $parkings_result->data_seek(0);
                             while($row = $parkings_result->fetch_assoc()): ?>
-                                <option value="<?php echo $row['id']; ?>"><?php echo $row['name']; ?></option>
+                                <option value="<?php echo $row['id']; ?>" data-price="<?php echo $row['price_per_hour']; ?>">
+                                    <?php echo htmlspecialchars($row['name']); ?> (<?php echo number_format($row['price_per_hour'], 2); ?> ₴/год)
+                                </option>
                             <?php endwhile; ?>
                         </select>
                     </div>
@@ -208,19 +213,29 @@
                         <select class="form-select" name="vehicle_id" id="bookingVehicleId" required>
                             <option value="">Оберіть транспорт</option>
                             <?php 
-                            $vehicles_result->data_seek(0);
-                            while($row = $vehicles_result->fetch_assoc()): ?>
-                                <option value="<?php echo $row['id']; ?>"><?php echo $row['brand']; ?> <?php echo $row['model']; ?> (<?php echo $row['license_plate']; ?>)</option>
-                            <?php endwhile; ?>
+                            if(isset($vehicles_result)) {
+                                $vehicles_result->data_seek(0);
+                                while($row = $vehicles_result->fetch_assoc()): ?>
+                                    <option value="<?php echo $row['id']; ?>"><?php echo htmlspecialchars($row['brand'] . ' ' . $row['model'] . ' (' . $row['license_plate'] . ')'); ?></option>
+                                <?php endwhile; 
+                            } ?>
                         </select>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Початок</label>
-                        <input type="datetime-local" class="form-control" name="start_time" required>
+                        <input type="datetime-local" class="form-control" name="start_time" id="bookingStartTime" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Кінець</label>
-                        <input type="datetime-local" class="form-control" name="end_time" required>
+                        <input type="datetime-local" class="form-control" name="end_time" id="bookingEndTime" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Орієнтовна вартість</label>
+                        <div class="form-control bg-light d-flex justify-content-between" readonly>
+                            <span class="text-muted">Сума до сплати:</span>
+                            <span id="estimatedPrice" class="fw-bold">0.00 ₴</span>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -232,7 +247,6 @@
     </div>
 </div>
 
-<!-- Модальне вікно для редагування бронювання -->
 <div class="modal fade" id="editBookingModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -250,7 +264,7 @@
                             <?php 
                             $parkings_result->data_seek(0);
                             while($row = $parkings_result->fetch_assoc()): ?>
-                                <option value="<?php echo $row['id']; ?>"><?php echo $row['name']; ?></option>
+                                <option value="<?php echo $row['id']; ?>"><?php echo htmlspecialchars($row['name']); ?></option>
                             <?php endwhile; ?>
                         </select>
                     </div>
@@ -259,10 +273,12 @@
                         <select class="form-select" name="vehicle_id" id="editBookingVehicleId" required>
                             <option value="">Оберіть транспорт</option>
                             <?php 
-                            $vehicles_result->data_seek(0);
-                            while($row = $vehicles_result->fetch_assoc()): ?>
-                                <option value="<?php echo $row['id']; ?>"><?php echo $row['brand']; ?> <?php echo $row['model']; ?> (<?php echo $row['license_plate']; ?>)</option>
-                            <?php endwhile; ?>
+                            if(isset($vehicles_result)) {
+                                $vehicles_result->data_seek(0);
+                                while($row = $vehicles_result->fetch_assoc()): ?>
+                                    <option value="<?php echo $row['id']; ?>"><?php echo htmlspecialchars($row['brand'] . ' ' . $row['model'] . ' (' . $row['license_plate'] . ')'); ?></option>
+                                <?php endwhile;
+                            } ?>
                         </select>
                     </div>
                     <div class="mb-3">
@@ -291,7 +307,6 @@
     </div>
 </div>
 
-<!-- Модальне вікно для реєстрації -->
 <div class="modal fade" id="registerModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -323,7 +338,6 @@
     </div>
 </div>
 
-<!-- Модальне вікно для авторизації -->
 <div class="modal fade" id="loginModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">

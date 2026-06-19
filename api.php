@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once 'config.php';
+require_once 'classes/Uploader.php'; // Підключаємо наш новий клас
 
 header('Content-Type: application/json');
 
@@ -52,16 +53,20 @@ switch ($action) {
         $address = $_POST['address'];
         $capacity = $_POST['capacity'];
         $available = $_POST['available'];
+        $price_per_hour = $_POST['price_per_hour'] ?? 0;
         
-        $image = '';
-        if (isset($_FILES['image']) && $_FILES['image']['error'] == 0) {
-            $image = 'images/' . time() . '_' . $_FILES['image']['name'];
-            move_uploaded_file($_FILES['image']['tmp_name'], $image);
+        // Нове безпечне завантаження через клас
+        $uploader = new Uploader();
+        try {
+            $image = $uploader->uploadImage('image');
+        } catch (Exception $e) {
+            echo json_encode(['error' => $e->getMessage()]);
+            exit;
         }
 
-        $sql = "INSERT INTO parking_places (name, address, capacity, available, image) VALUES (?, ?, ?, ?, ?)";
+        $sql = "INSERT INTO parking_places (name, address, capacity, available, price_per_hour, image) VALUES (?, ?, ?, ?, ?, ?)";
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("ssiis", $name, $address, $capacity, $available, $image);
+        $stmt->bind_param("ssiids", $name, $address, $capacity, $available, $price_per_hour, $image);
 
         if ($stmt->execute()) {
             echo json_encode(['success' => true, 'id' => $stmt->insert_id]);
@@ -81,10 +86,11 @@ switch ($action) {
         $address = $_POST['address'];
         $capacity = $_POST['capacity'];
         $available = $_POST['available'];
+        $price_per_hour = $_POST['price_per_hour'] ?? 0;
 
-        $sql = "UPDATE parking_places SET name = ?, address = ?, capacity = ?, available = ? WHERE id = ?";
+        $sql = "UPDATE parking_places SET name = ?, address = ?, capacity = ?, available = ?, price_per_hour = ? WHERE id = ?";
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("ssiii", $name, $address, $capacity, $available, $id);
+        $stmt->bind_param("ssiidi", $name, $address, $capacity, $available, $price_per_hour, $id);
 
         if ($stmt->execute()) {
             echo json_encode(['success' => true]);
@@ -119,10 +125,13 @@ switch ($action) {
         $color = $_POST['color'];
         $parking_id = !empty($_POST['parking_id']) ? $_POST['parking_id'] : null;
 
-        $image = '';
-        if (isset($_FILES['image']) && $_FILES['image']['error'] == 0) {
-            $image = 'images/' . time() . '_' . $_FILES['image']['name'];
-            move_uploaded_file($_FILES['image']['tmp_name'], $image);
+        // Нове безпечне завантаження через клас
+        $uploader = new Uploader();
+        try {
+            $image = $uploader->uploadImage('image');
+        } catch (Exception $e) {
+            echo json_encode(['error' => $e->getMessage()]);
+            exit;
         }
 
         $sql = "INSERT INTO vehicles (license_plate, brand, model, color, parking_id, image, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)";
@@ -175,12 +184,11 @@ switch ($action) {
         $start_time = $_POST['start_time'];
         $end_time = $_POST['end_time'];
 
-        // Початок транзакції
         $conn->begin_transaction();
 
         try {
-            // Перевірка наявності місць
-            $check_sql = "SELECT available, capacity FROM parking_places WHERE id = ? FOR UPDATE";
+            // Отримуємо дані паркінгу для перевірки місць та тарифу
+            $check_sql = "SELECT available, capacity, price_per_hour FROM parking_places WHERE id = ? FOR UPDATE";
             $check_stmt = $conn->prepare($check_sql);
             $check_stmt->bind_param("i", $parking_id);
             $check_stmt->execute();
@@ -191,20 +199,31 @@ switch ($action) {
                 throw new Exception("На жаль, на цьому паркінгу немає вільних місць.");
             }
 
+            // Розрахунок вартості
+            $start_timestamp = strtotime($start_time);
+            $end_timestamp = strtotime($end_time);
+            
+            if ($end_timestamp <= $start_timestamp) {
+                throw new Exception("Час завершення має бути пізнішим за час початку.");
+            }
+
+            // Округлюємо кількість годин в більшу сторону
+            $hours = ceil(($end_timestamp - $start_timestamp) / 3600);
+            $total_price = $hours * $parking['price_per_hour'];
+
             // Зменшення кількості вільних місць
             $update_sql = "UPDATE parking_places SET available = available - 1 WHERE id = ?";
             $update_stmt = $conn->prepare($update_sql);
             $update_stmt->bind_param("i", $parking_id);
             $update_stmt->execute();
 
-        // Статус за замовчуванням 'pending'
-        $sql = "INSERT INTO bookings (user_id, parking_id, vehicle_id, start_time, end_time, status) VALUES (?, ?, ?, ?, ?, 'pending')";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("iiiss", $user_id, $parking_id, $vehicle_id, $start_time, $end_time);
+            $sql = "INSERT INTO bookings (user_id, parking_id, vehicle_id, start_time, end_time, total_price, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("iiissd", $user_id, $parking_id, $vehicle_id, $start_time, $end_time, $total_price);
             $stmt->execute();
 
             $conn->commit();
-            echo json_encode(['success' => true, 'id' => $stmt->insert_id]);
+            echo json_encode(['success' => true, 'id' => $stmt->insert_id, 'total_price' => $total_price]);
 
         } catch (Exception $e) {
             $conn->rollback();
@@ -222,20 +241,17 @@ switch ($action) {
 
         $conn->begin_transaction();
         try {
-            // Отримуємо стару інформацію про бронювання
             $get_old = $conn->prepare("SELECT parking_id, status FROM bookings WHERE id = ? FOR UPDATE");
             $get_old->bind_param("i", $id);
             $get_old->execute();
             $old = $get_old->get_result()->fetch_assoc();
 
-            // Якщо паркінг змінився і бронювання займає місце (active/pending), перераховуємо доступність
             if ($old && $old['parking_id'] != $new_parking_id && ($old['status'] == 'active' || $old['status'] == 'pending')) {
-                // Звільняємо місце на старому паркінгу
                 $conn->query("UPDATE parking_places SET available = available + 1 WHERE id = " . (int)$old['parking_id']);
-                // Займаємо місце на новому паркінгу
                 $conn->query("UPDATE parking_places SET available = available - 1 WHERE id = " . (int)$new_parking_id);
             }
 
+            // Можна додати перерахунок ціни при оновленні, але поки залишаємо як є
             $sql = "UPDATE bookings SET parking_id = ?, vehicle_id = ?, start_time = ?, end_time = ?, status = ? WHERE id = ?";
             $stmt = $conn->prepare($sql);
             $stmt->bind_param("iisssi", $new_parking_id, $vehicle_id, $start_time, $end_time, $status, $id);
@@ -255,19 +271,17 @@ switch ($action) {
         $conn->begin_transaction();
         
         try {
-            // Отримуємо ID паркінгу перед видаленням, щоб звільнити місце
             $get_sql = "SELECT parking_id, status FROM bookings WHERE id = ?";
             $get_stmt = $conn->prepare($get_sql);
             $get_stmt->bind_param("i", $id);
             $get_stmt->execute();
             $booking = $get_stmt->get_result()->fetch_assoc();
 
-        $sql = "DELETE FROM bookings WHERE id = ?";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("i", $id);
+            $sql = "DELETE FROM bookings WHERE id = ?";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("i", $id);
             $stmt->execute();
 
-            // Якщо бронювання було активне, повертаємо місце
             if ($booking && ($booking['status'] == 'active' || $booking['status'] == 'pending')) {
                 $update_sql = "UPDATE parking_places SET available = available + 1 WHERE id = ?";
                 $update_stmt = $conn->prepare($update_sql);
@@ -283,7 +297,6 @@ switch ($action) {
         }
         break;
 
-    // Нові методи для отримання даних (для редагування)
     case 'get_parking':
         $id = $_GET['id'];
         $sql = "SELECT * FROM parking_places WHERE id = ?";
@@ -311,7 +324,6 @@ switch ($action) {
         echo json_encode($stmt->get_result()->fetch_assoc());
         break;
 
-    // Зміна статусу бронювання (Підтвердження/Відхилення)
     case 'change_booking_status':
         if (!$is_admin) {
             http_response_code(403);
@@ -319,18 +331,16 @@ switch ($action) {
             exit;
         }
         $id = $_POST['id'];
-        $status = $_POST['status']; // 'active' або 'cancelled'
+        $status = $_POST['status'];
 
         $conn->begin_transaction();
         try {
-            // Отримуємо поточний статус та ID паркінгу
             $check_sql = "SELECT status, parking_id FROM bookings WHERE id = ? FOR UPDATE";
             $check_stmt = $conn->prepare($check_sql);
             $check_stmt->bind_param("i", $id);
             $check_stmt->execute();
             $booking = $check_stmt->get_result()->fetch_assoc();
 
-            // Якщо відхиляємо, треба повернути місце (якщо воно було зайняте pending або active)
             if ($status == 'cancelled' && ($booking['status'] == 'active' || $booking['status'] == 'pending')) {
                 $update_place = "UPDATE parking_places SET available = available + 1 WHERE id = ?";
                 $u_stmt = $conn->prepare($update_place);

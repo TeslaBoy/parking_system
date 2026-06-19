@@ -43,26 +43,27 @@ if (!isset($roles['user'])) {
     $conn->query("INSERT INTO users (username, password, email, role) VALUES ('$test_user', '$test_pass', 'user@example.com', 'user')");
 }
 
-// Створення таблиці паркінгів
+// Створення таблиці паркінгів (ДОДАНО price_per_hour)
 $sql = "CREATE TABLE IF NOT EXISTS parking_places (
     id INT(6) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     address VARCHAR(200) NOT NULL,
     capacity INT(4) NOT NULL,
     available INT(4) NOT NULL,
+    price_per_hour DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     image VARCHAR(200),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )";
 $conn->query($sql);
 
-// Додавання початкових парковок у Кам'янському
+// Додавання початкових парковок
 $check_parkings = $conn->query("SELECT COUNT(*) as count FROM parking_places");
 $parkings_count = $check_parkings->fetch_assoc()['count'];
 if ($parkings_count == 0) {
-    $sql_initial_parkings = "INSERT INTO parking_places (name, address, capacity, available, image) VALUES 
-        ('Центральний паркінг', 'м. Кам\'янське, вул. Будівельників, 1', 50, 50, 'images/central.jpg'),
-        ('Парковка біля ЦУМу', 'м. Кам\'янське, пр. Свободи, 35', 30, 30, 'images/tsum.jpeg'),
-        ('Паркінг Залізничний', 'м. Кам\'янське, вул. Залізнична, 10', 20, 20, 'images/station.jpg')";
+    $sql_initial_parkings = "INSERT INTO parking_places (name, address, capacity, available, price_per_hour, image) VALUES 
+        ('Центральний паркінг', 'м. Кам\'янське, вул. Будівельників, 1', 50, 50, 20.00, 'images/central.jpg'),
+        ('Парковка біля ЦУМу', 'м. Кам\'янське, пр. Свободи, 35', 30, 30, 30.00, 'images/tsum.jpeg'),
+        ('Паркінг Залізничний', 'м. Кам\'янське, вул. Залізнична, 10', 20, 20, 15.00, 'images/station.jpg')";
     $conn->query($sql_initial_parkings);
 }
 
@@ -95,7 +96,7 @@ if ($check_vehicles->fetch_assoc()['count'] == 0) {
     }
 }
 
-// Створення таблиці бронювань
+// Створення таблиці бронювань (Додано ON DELETE CASCADE)
 $sql = "CREATE TABLE IF NOT EXISTS bookings (
     id INT(6) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     user_id INT(6) UNSIGNED,
@@ -103,11 +104,12 @@ $sql = "CREATE TABLE IF NOT EXISTS bookings (
     vehicle_id INT(6) UNSIGNED,
     start_time DATETIME NOT NULL,
     end_time DATETIME NOT NULL,
+    total_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     status ENUM('pending', 'active', 'completed', 'cancelled') DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (parking_id) REFERENCES parking_places(id),
-    FOREIGN KEY (vehicle_id) REFERENCES vehicles(id)
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (parking_id) REFERENCES parking_places(id) ON DELETE CASCADE,
+    FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE CASCADE
 )";
 $conn->query($sql);
 ?>

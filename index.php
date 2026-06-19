@@ -17,6 +17,11 @@ $user_result = $user_stmt->get_result();
 $user = $user_result->fetch_assoc();
 $is_admin = ($user['role'] == 'admin');
 
+// Збір статистики для адміна
+$stats = ['revenue' => 0, 'active_bookings' => 0];
+$chart_labels = [];
+$chart_data = [];
+
 // Отримання даних для відображення
 $parkings_sql = "SELECT * FROM parking_places";
 $parkings_result = $conn->query($parkings_sql);
@@ -24,6 +29,20 @@ $parkings_result = $conn->query($parkings_sql);
 if ($is_admin) {
     $vehicles_sql = "SELECT v.*, p.name as parking_name FROM vehicles v LEFT JOIN parking_places p ON v.parking_id = p.id";
     $vehicles_result = $conn->query($vehicles_sql);
+    
+    // --- Збір даних для Дашборду ---
+    $rev_sql = "SELECT SUM(total_price) as total FROM bookings WHERE status IN ('completed', 'active')";
+    $stats['revenue'] = $conn->query($rev_sql)->fetch_assoc()['total'] ?? 0;
+
+    $act_sql = "SELECT COUNT(*) as count FROM bookings WHERE status = 'active'";
+    $stats['active_bookings'] = $conn->query($act_sql)->fetch_assoc()['count'] ?? 0;
+
+    // Дані для графіка заповненості паркінгів
+    $chart_res = $conn->query("SELECT name, capacity, available FROM parking_places");
+    while($c = $chart_res->fetch_assoc()) {
+        $chart_labels[] = $c['name'];
+        $chart_data[] = $c['capacity'] - $c['available']; // Кількість зайнятих місць
+    }
 } else {
     $vehicles_sql = "SELECT v.*, p.name as parking_name FROM vehicles v LEFT JOIN parking_places p ON v.parking_id = p.id WHERE v.user_id = ?";
     $v_stmt = $conn->prepare($vehicles_sql);
@@ -46,18 +65,20 @@ if (!$is_admin) {
 }
 
 $page_title = "Головна сторінка";
-include 'header.php'; // Змінюємо на корінь, якщо файли ще не переміщені
+include 'header.php'; 
 ?>
     <div class="container mt-4">
         <?php if ($is_admin): ?>
-            <!-- АДМІН ІНТЕРФЕЙС -->
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h2>Панель керування</h2>
             </div>
 
             <ul class="nav nav-tabs mb-4" id="adminTabs" role="tablist">
                 <li class="nav-item">
-                    <button class="nav-link active" id="parkings-tab" data-bs-toggle="tab" data-bs-target="#parkings" type="button">Паркінги</button>
+                    <button class="nav-link active" id="dashboard-tab" data-bs-toggle="tab" data-bs-target="#dashboard" type="button">Дашборд</button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" id="parkings-tab" data-bs-toggle="tab" data-bs-target="#parkings" type="button">Паркінги</button>
                 </li>
                 <li class="nav-item">
                     <button class="nav-link" id="vehicles-tab" data-bs-toggle="tab" data-bs-target="#vehicles" type="button">Транспорт</button>
@@ -68,8 +89,45 @@ include 'header.php'; // Змінюємо на корінь, якщо файли
             </ul>
 
             <div class="tab-content" id="adminTabsContent">
-                <!-- Вкладка Паркінги -->
-                <div class="tab-pane fade show active" id="parkings">
+                
+                <div class="tab-pane fade show active" id="dashboard">
+                    <div class="row mb-4">
+                        <div class="col-md-6 mb-3">
+                            <div class="card text-white bg-success h-100 shadow-sm">
+                                <div class="card-body">
+                                    <h5 class="card-title"><i class="bi bi-cash-stack"></i> Загальний дохід</h5>
+                                    <h2 class="display-6"><?php echo number_format($stats['revenue'], 2); ?> ₴</h2>
+                                    <p class="card-text small">З активних та завершених бронювань</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="card text-white bg-primary h-100 shadow-sm">
+                                <div class="card-body">
+                                    <h5 class="card-title"><i class="bi bi-car-front-fill"></i> Активні паркування</h5>
+                                    <h2 class="display-6"><?php echo $stats['active_bookings']; ?></h2>
+                                    <p class="card-text small">Автомобілів зараз на стоянках</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-white">
+                            <h5 class="mb-0">Завантаженість паркінгів (Зайняті місця)</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="occupancyChart" style="max-height: 300px;"></canvas>
+                        </div>
+                    </div>
+                    
+                    <script>
+                        window.chartLabels = <?php echo json_encode($chart_labels); ?>;
+                        window.chartData = <?php echo json_encode($chart_data); ?>;
+                    </script>
+                </div>
+
+                <div class="tab-pane fade" id="parkings">
                     <button class="btn btn-primary mb-3" data-bs-toggle="modal" data-bs-target="#addParkingModal">
                         <i class="bi bi-plus-circle"></i> Додати паркінг
                     </button>
@@ -80,6 +138,7 @@ include 'header.php'; // Змінюємо на корінь, якщо файли
                                     <th>ID</th>
                                     <th>Назва</th>
                                     <th>Адреса</th>
+                                    <th>Тариф</th>
                                     <th>Заповненість</th>
                                     <th>Дії</th>
                                 </tr>
@@ -90,6 +149,7 @@ include 'header.php'; // Змінюємо на корінь, якщо файли
                                     <td><?php echo $row['id']; ?></td>
                                     <td><?php echo htmlspecialchars($row['name']); ?></td>
                                     <td><?php echo htmlspecialchars($row['address']); ?></td>
+                                    <td class="fw-bold"><?php echo number_format($row['price_per_hour'], 2); ?> ₴/год</td>
                                     <td>
                                         <div class="progress" style="height: 20px;">
                                             <?php 
@@ -112,7 +172,6 @@ include 'header.php'; // Змінюємо на корінь, якщо файли
                     </div>
                 </div>
 
-                <!-- Вкладка Транспорт -->
                 <div class="tab-pane fade" id="vehicles">
                     <button class="btn btn-primary mb-3" data-bs-toggle="modal" data-bs-target="#addVehicleModal">Додати транспорт</button>
                     <div class="table-responsive">
@@ -144,7 +203,6 @@ include 'header.php'; // Змінюємо на корінь, якщо файли
                     </div>
                 </div>
 
-                <!-- Вкладка Бронювання -->
                 <div class="tab-pane fade" id="bookings">
                     <div class="table-responsive">
                         <table class="table table-striped table-hover">
@@ -155,6 +213,7 @@ include 'header.php'; // Змінюємо на корінь, якщо файли
                                     <th>Паркінг</th>
                                     <th>Авто</th>
                                     <th>Період</th>
+                                    <th>Сума</th>
                                     <th>Статус</th>
                                     <th>Дії</th>
                                 </tr>
@@ -170,6 +229,7 @@ include 'header.php'; // Змінюємо на корінь, якщо файли
                                         <small><?php echo date('d.m H:i', strtotime($row['start_time'])); ?> - <br>
                                         <?php echo date('d.m H:i', strtotime($row['end_time'])); ?></small>
                                     </td>
+                                    <td class="text-success fw-bold"><?php echo number_format($row['total_price'], 2); ?> ₴</td>
                                     <td>
                                         <span class="badge bg-<?php echo $row['status'] == 'active' ? 'success' : ($row['status'] == 'pending' ? 'warning' : ($row['status'] == 'completed' ? 'secondary' : 'danger')); ?>">
                                             <?php echo $row['status'] == 'pending' ? 'Очікує' : $row['status']; ?>
@@ -197,9 +257,7 @@ include 'header.php'; // Змінюємо на корінь, якщо файли
             </div>
 
         <?php else: ?>
-            <!-- КОРИСТУВАЦЬКИЙ ІНТЕРФЕЙС -->
-        <div class="row">
-            <!-- Ліва колонка: Мої бронювання та Дії -->
+            <div class="row">
             <div class="col-md-4 mb-4">
                 <div class="d-grid gap-2 mb-4">
                     <button class="btn btn-success btn-lg" data-bs-toggle="modal" data-bs-target="#addBookingModal">
@@ -210,30 +268,31 @@ include 'header.php'; // Змінюємо на корінь, якщо файли
                     </button>
                 </div>
 
-                <div class="card">
-                    <div class="card-header">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white">
                         <h5 class="mb-0">Мої бронювання</h5>
                     </div>
                     <div class="card-body">
                         <?php if ($bookings_result->num_rows > 0): ?>
                             <div id="bookingsList" class="list-group list-group-flush">
                                 <?php while($row = $bookings_result->fetch_assoc()): ?>
-                                    <div class="list-group-item">
+                                    <div class="list-group-item px-0">
                                         <div class="d-flex w-100 justify-content-between">
                                             <h6 class="mb-1"><?php echo htmlspecialchars($row['parking_name']); ?></h6>
                                             <small class="badge bg-<?php echo $row['status'] == 'active' ? 'success' : ($row['status'] == 'pending' ? 'warning' : 'secondary'); ?>">
                                                 <?php echo $row['status'] == 'pending' ? 'Очікує підтвердження' : $row['status']; ?>
                                             </small>
                                         </div>
-                                        <p class="mb-1 small">Авто: <?php echo htmlspecialchars($row['license_plate']); ?></p>
-                                        <small class="text-muted">
-                                            <?php echo date('d.m H:i', strtotime($row['start_time'])); ?> - 
-                                            <?php echo date('d.m H:i', strtotime($row['end_time'])); ?>
+                                        <p class="mb-1 small">Авто: <span class="badge bg-secondary"><?php echo htmlspecialchars($row['license_plate']); ?></span></p>
+                                        <small class="text-muted d-block mb-2">
+                                            <i class="bi bi-clock"></i> <?php echo date('d.m.Y H:i', strtotime($row['start_time'])); ?> — 
+                                            <?php echo date('d.m.Y H:i', strtotime($row['end_time'])); ?>
                                         </small>
-                                        <?php if($row['status'] == 'active'): ?>
-                                            <div class="mt-2">
-                                                <button class="btn btn-outline-danger btn-sm btn-delete-booking w-100" data-id="<?php echo (int)$row['id']; ?>">Скасувати</button>
-                                            </div>
+                                        <div class="fw-bold text-success mb-2">
+                                            До сплати: <?php echo number_format($row['total_price'], 2); ?> ₴
+                                        </div>
+                                        <?php if($row['status'] == 'active' || $row['status'] == 'pending'): ?>
+                                            <button class="btn btn-outline-danger btn-sm btn-delete-booking w-100" data-id="<?php echo (int)$row['id']; ?>">Скасувати</button>
                                         <?php endif; ?>
                                     </div>
                                 <?php endwhile; ?>
@@ -245,7 +304,6 @@ include 'header.php'; // Змінюємо на корінь, якщо файли
                 </div>
             </div>
 
-            <!-- Права колонка: Доступні паркінги -->
             <div class="col-md-8">
                 <h4 class="mb-3">Доступні паркінги</h4>
                 <div class="row row-cols-1 row-cols-md-2 g-4">
@@ -261,17 +319,19 @@ include 'header.php'; // Змінюємо на корінь, якщо файли
                                 <?php endif; ?>
                                 <div class="card-body">
                                     <h5 class="card-title"><?php echo htmlspecialchars($row['name']); ?></h5>
-                                    <p class="card-text text-muted small"><i class="bi bi-geo-alt"></i> <?php echo htmlspecialchars($row['address']); ?></p>
+                                    <p class="card-text text-muted small mb-1"><i class="bi bi-geo-alt"></i> <?php echo htmlspecialchars($row['address']); ?></p>
+                                    <p class="card-text fw-bold text-primary mb-2"><?php echo number_format($row['price_per_hour'], 2); ?> ₴ / год</p>
+                                    
                                     <div class="d-flex justify-content-between align-items-center mt-3">
-                                        <span class="badge bg-<?php echo $row['available'] > 0 ? 'success' : 'danger'; ?> rounded-pill">
+                                        <span class="badge bg-<?php echo $row['available'] > 0 ? 'success' : 'danger'; ?> rounded-pill px-3 py-2">
                                             Вільних місць: <?php echo (int)$row['available']; ?>
                                         </span>
                                         <?php if ($row['available'] > 0): ?>
-                                            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addBookingModal" onclick="document.querySelector('#bookingParkingId').value='<?php echo $row['id']; ?>'">
+                                            <button class="btn btn-primary btn-sm px-3" data-bs-toggle="modal" data-bs-target="#addBookingModal" onclick="document.querySelector('#bookingParkingId').value='<?php echo $row['id']; ?>'; document.getElementById('bookingParkingId').dispatchEvent(new Event('change'));">
                                                 Забронювати
                                             </button>
                                         <?php else: ?>
-                                            <button class="btn btn-secondary btn-sm" disabled>Зайнято</button>
+                                            <button class="btn btn-secondary btn-sm px-3" disabled>Зайнято</button>
                                         <?php endif; ?>
                                     </div>
                                 </div>
@@ -284,6 +344,5 @@ include 'header.php'; // Змінюємо на корінь, якщо файли
         <?php endif; ?>
     </div>
 
-    <!-- Модальні вікна -->
     <?php include 'modals.php'; ?>
 <?php include 'footer.php'; ?>
