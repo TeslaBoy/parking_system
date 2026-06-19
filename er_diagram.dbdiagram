@@ -1,0 +1,35 @@
+{
+  "version": "1.0.0",
+  "darkMode": false,
+  "gridEnabling": false,
+  "detailLevel": "All",
+  "tablePositions": [
+    {
+      "name": "users",
+      "schemaName": "public",
+      "x": 764.226555676114,
+      "y": 150.14329800896348
+    },
+    {
+      "name": "parking_places",
+      "schemaName": "public",
+      "x": 148.0461102511083,
+      "y": -14.08718855499717
+    },
+    {
+      "name": "vehicles",
+      "schemaName": "public",
+      "x": 463.77446599275123,
+      "y": 16.513533783539174
+    },
+    {
+      "name": "bookings",
+      "schemaName": "public",
+      "x": 416.11907048423916,
+      "y": -331.3928916498178
+    }
+  ],
+  "tableGroupCollapseStates": [],
+  "stickyNoteLayouts": [],
+  "referencePaths": []
+}

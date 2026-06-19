@@ -1,0 +1,75 @@
+/* Додаткові стилі для покращення вигляду */
+
+body {
+    background-color: #f8f9fa;
+}
+
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    border: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+/* Стилі для адмінки */
+.table th {
+    font-weight: 600;
+}
+
+.parking-card {
+    transition: transform 0.2s;
+}
+
+.parking-card:hover {
+    transform: translateY(-5px);
+}
+
+.booking-item {
+    background-color: #fff;
+    border-left: 4px solid #007bff;
+}
+
+.parking-item:hover, .vehicle-item:hover, .booking-item:hover {
+    background-color: #e9ecef;
+}
+
+.btn-group-sm .btn {
+    font-size: 0.75rem;
+}
+
+.navbar-brand {
+    font-weight: bold;
+}
+
+.alert {
+    border-radius: 0.375rem;
+}
+
+.modal-header {
+    border-bottom: 1px solid #dee2e6;
+}
+
+.modal-footer {
+    border-top: 1px solid #dee2e6;
+}
+
+.form-label {
+    font-weight: 500;
+}
+
+.text-muted {
+    color: #6c757d !important;
+}
+
+.badge {
+    font-size: 0.75em;
+}
+
+/* Адаптивність */
+@media (max-width: 768px) {
+    .container {
+        padding: 0 15px;
+    }
+    
+    .card {
+        margin-bottom: 1rem;
+    }
+}

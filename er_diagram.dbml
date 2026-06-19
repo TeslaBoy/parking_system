@@ -1,0 +1,51 @@
+// ER діаграма для системи управління паркінгом
+// Створено на основі SQL-структури проекту
+
+Table users {
+  id int [pk, increment]
+  username varchar(30) [not null, unique]
+  password varchar(255) [not null]
+  email varchar(50)
+  role enum('admin', 'user') [default: 'user']
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+}
+
+Table parking_places {
+  id int [pk, increment]
+  name varchar(100) [not null]
+  address varchar(200) [not null]
+  capacity int [not null]
+  available int [not null]
+  image varchar(200)
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+}
+
+Table vehicles {
+  id int [pk, increment]
+  license_plate varchar(20) [not null]
+  brand varchar(50) [not null]
+  model varchar(50) [not null]
+  color varchar(30) [not null]
+  user_id int
+  parking_id int
+  image varchar(200)
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+}
+
+Table bookings {
+  id int [pk, increment]
+  user_id int
+  parking_id int
+  vehicle_id int
+  start_time datetime [not null]
+  end_time datetime [not null]
+  status enum('pending', 'active', 'completed', 'cancelled') [default: 'pending']
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+}
+
+// Додаткові обмеження
+Ref: "users"."id" < "vehicles"."user_id" [delete: cascade]
+Ref: "parking_places"."id" < "vehicles"."parking_id"
+Ref: "users"."id" < "bookings"."user_id"
+Ref: "parking_places"."id" < "bookings"."parking_id"
+Ref: "vehicles"."id" < "bookings"."vehicle_id"

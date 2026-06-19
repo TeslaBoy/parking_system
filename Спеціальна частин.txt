@@ -1,0 +1,429 @@
+2 Спеціальна частина
+2.1 Розробка інформаційної системи
+2.1.1 Постановка задачі
+
+Інформаційна система для управління паркінгом призначена для автоматизації процесів бронювання, контролю та обліку парковочних місць. 
+Система має забезпечувати можливість користувачам реєструватися та авторизовуватися, додавати свої транспортні засоби, переглядати доступні паркінги, бронювати місця на певний час, а також переглядати свої поточні та історичні бронювання. 
+Для адміністраторів система має надавати інструменти для управління паркінгами, транспортними засобами, бронюваннями, а також контролювати статуси бронювань..
+
+2.1.2 Мета створення інформаційна система
+
+Інформаційна система повинна забезпечувати ефективне управління парковочними місцями, відповідаючи на наступні питання:
+- яка загальна кількість парковочних місць доступна на кожному паркінгу;
+- скільки місць вже зайнято та скільки залишилось вільних;
+- які транспортні засоби належать конкретному користувачу;
+- які бронювання були здійснені користувачем, їх статус та терміни;
+- які паркінги доступні для бронювання та їх розташування;
+- які бронювання очікують підтвердження від адміністратора.
+
+
+
+2.1.3 Аналіз предметної області
+
+В заданій предметній області можна виділити наступні базові сутності:
+1)Користувачі - особи, які мають доступ до системи. Мають обліковий запис з логіном, паролем та роллю (користувач або адміністратор). Можуть мати кілька транспортних засобів.
+2)Транспортні засоби - об'єкти, які належать користувачам. Мають реєстраційний номер, марку, модель, колір. Можуть бути призначені на певний паркінг.
+3)Паркінги - об'єкти, що мають певну місткість (кількість місць). Зберігають інформацію про загальну кількість місць та кількість вільних. Мають назву та адресу.
+4)Бронювання - процес резервації парковочного місця на певний час. Має початок та кінець періоду бронювання, статус (очікує підтвердження, активне, завершене, скасоване). Пов'язує користувача, транспортний засіб та паркінг.
+
+2.1.4 Проєктування та створення бази даних
+
+Згідно аналізу предметної області, необхідно створити базу даних та в ній щонайменше 4 таблиць.
+Таблиця users - зберігає інформацію про користувачів системи:
+CREATE TABLE IF NOT EXISTS users (
+    id INT(6) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(30) NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    email VARCHAR(50),
+    role ENUM('admin', 'user') DEFAULT 'user',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+Таблиця містить унікальний ідентифікатор, логін, хеш пароля, email, роль користувача (адміністратор або звичайний користувач) та дату створення облікового запису. При створенні бази даних автоматично додаються тестові користувачі: адміністратор з логіном "admin" та паролем "admin123", та звичайний користувач з логіном "user" та паролем "user123".
+Таблиця parking_places - зберігає інформацію про парковочні місця:
+CREATE TABLE IF NOT EXISTS parking_places (
+    id INT(6) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    address VARCHAR(200) NOT NULL,
+    capacity INT(4) NOT NULL,
+    available INT(4) NOT NULL,
+    image VARCHAR(200),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+Таблиця містить унікальний ідентифікатор, назву паркінгу, адресу, загальну місткість (кількість місць) та кількість доступних місць. Також передбачено поле для зображення паркінгу. При створенні бази даних автоматично додаються три тестові паркінги у місті Кам'янське: Центральний паркінг, Парковка біля ЦУМу та Паркінг Залізничний.
+Таблиця vehicles - зберігає інформацію про транспортні засоби:
+CREATE TABLE IF NOT EXISTS vehicles (
+    id INT(6) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    license_plate VARCHAR(20) NOT NULL,
+    brand VARCHAR(50) NOT NULL,
+    model VARCHAR(50) NOT NULL,
+    color VARCHAR(30) NOT NULL,
+    user_id INT(6) UNSIGNED,
+    parking_id INT(6) UNSIGNED,
+    image VARCHAR(200),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (parking_id) REFERENCES parking_places(id)
+)
+Таблиця містить унікальний ідентифікатор, реєстраційний номер, марку, модель, колір транспортного засобу, а також зв'язки з користувачем (володарем) та паркінгом (якщо транспорт призначено на певний паркінг). При створенні бази даних для тестового користувача автоматично додаються два транспортні засоби: Tesla Model 3 та BMW X5.
+Таблиця bookings - зберігає інформацію про бронювання:
+CREATE TABLE IF NOT EXISTS bookings (
+    id INT(6) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT(6) UNSIGNED,
+    parking_id INT(6) UNSIGNED,
+    vehicle_id INT(6) UNSIGNED,
+    start_time DATETIME NOT NULL,
+    end_time DATETIME NOT NULL,
+    status ENUM('pending', 'active', 'completed', 'cancelled') DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (parking_id) REFERENCES parking_places(id),
+    FOREIGN KEY (vehicle_id) REFERENCES vehicles(id)
+)
+Таблиця містить унікальний ідентифікатор бронювання, зв'язки з користувачем, паркінгом та транспортним засобом, а також часові межі бронювання (початок та кінець) та статус. 
+Статуси бронювання: "pending" (очікує підтвердження), "active" (активне), "completed" (завершене), "cancelled" (скасоване). 
+Взаємовідносини між таблицями бази даних виражає наступна схема (рис. 2.1).
+
+
+Рисунок 2.1 – Взаємовідносини між таблицями бази даних
+
+2.1.5 Написання SQL запитів до БД 
+
+Система використовує набір основних SQL-запитів для забезпечення функціонування та взаємодії з базою даних, що дозволяє реалізувати ключові операції користувачів та адміністратора.
+Для отримання повного переліку доступних паркінгів використовується запит:
+SELECT * FROM parking_places
+Для отримання списку транспортних засобів конкретного користувача застосовується об’єднання таблиць vehicles та parking_places, що дозволяє отримати додаткову інформацію про назву паркінгу:
+SELECT v.*, p.name as parking_name FROM vehicles v 
+LEFT JOIN parking_places p ON v.parking_id = p.id 
+WHERE v.user_id = ?
+Запит для отримання бронювань користувача здійснює об’єднання чотирьох таблиць: bookings, users, parking_places та vehicles. Це дозволяє отримати повну інформацію про бронювання, включно з даними про користувача, транспортний засіб та паркінг:
+SELECT b.*, u.username, p.name as parking_name, v.license_plate 
+FROM bookings b 
+JOIN users u ON b.user_id = u.id 
+JOIN parking_places p ON b.parking_id = p.id 
+JOIN vehicles v ON b.vehicle_id = v.id 
+WHERE b.user_id = ?
+Додавання нового паркінгу реалізується за допомогою підготовленого запиту:
+INSERT INTO parking_places (name, address, capacity, available, image) 
+VALUES (?, ?, ?, ?, ?)
+
+Аналогічно, для реєстрації нового транспортного засобу користувача використовується запит:
+INSERT INTO vehicles (license_plate, brand, model, color, parking_id, image, user_id) 
+VALUES (?, ?, ?, ?, ?, ?, ?)
+Створення нового бронювання виконується за допомогою запиту, який встановлює статус бронювання за замовчуванням як pending:
+INSERT INTO bookings (user_id, parking_id, vehicle_id, start_time, end_time, status) 
+VALUES (?, ?, ?, ?, ?, 'pending')
+Для підтримки актуальної інформації про кількість доступних місць у паркінгу при створенні бронювання застосовується оновлення:
+UPDATE parking_places SET available = available - 1 WHERE id = ?
+Зміна статусу бронювання здійснюється запитом:
+UPDATE bookings SET status = ? WHERE id = ?
+У разі видалення бронювання забезпечується повернення місця у паркінгу:
+DELETE FROM bookings WHERE id = ?
+UPDATE parking_places SET available = available + 1 WHERE id = ?
+
+2.2 Розробка інтерфейсу користувача
+2.2.1 Планування інтерфейсу та розробка макету майбутнього сайту
+
+Інтерфейс системи розроблено з використанням Bootstrap 5 для забезпечення адаптивності та сучасного вигляду. Система має дві основні частини: адміністративну панель та користувацький інтерфейс. 
+Адміністративна панель надає доступ до управління всіма об'єктами системи, тоді як користувацький інтерфейс дозволяє користувачам виконувати основні операції: перегляд доступних паркінгів, бронювання місць, додавання транспортних засобів. 
+
+2.2.2 Створення макету сайту
+
+Інтерфейс системи побудований таким чином, щоб забезпечити інтуїтивну навігацію та розмежування функціоналу для різних категорій користувачів. Центральним елементом є головна сторінка (index.php), яка виконує роль точки входу до системи. 
+Для авторизованих користувачів відображається інтерфейс відповідно до їх ролі: адміністратора або звичайного користувача.
+
+Навігаційна панель розташована у верхній частині сторінки та містить назву системи, а також інформацію про поточного користувача. Для адміністраторів відображається напис «Admin Panel», для звичайних користувачів — «Smart Parking». Крім того, панель включає привітання користувача та посилання для виходу із системи. 
+Приклад реалізації навігаційної панелі наведено нижче:
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container">
+        <a class="navbar-brand" href="index.php">
+            <?php echo ($is_admin ?? false) ? 'Admin Panel' : 'Smart Parking'; ?>
+        </a>
+        <div class="navbar-nav ms-auto">
+            <span class="navbar-text me-3">
+                Вітаємо, <?php echo htmlspecialchars($_SESSION['username']); ?>!
+            </span>
+            <a class="nav-link" href="logout.php">Вихід</a>
+        </div>
+    </div>
+</nav>
+Адміністративна панель реалізована за допомогою вкладок, що дозволяє ефективно перемикатися між основними розділами системи: паркінги, транспортні засоби та всі бронювання. 
+Кожна вкладка містить таблицю з відповідними даними та кнопками для виконання CRUD-операцій. Приклад реалізації вкладок наведено нижче:
+<ul class="nav nav-tabs mb-4" id="adminTabs" role="tablist">
+    <li class="nav-item">
+        <button class="nav-link active" id="parkings-tab" data-bs-toggle="tab" data-bs-target="#parkings" type="button">
+            Паркінги
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link" id="vehicles-tab" data-bs-toggle="tab" data-bs-target="#vehicles" type="button">
+            Транспорт
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link" id="bookings-tab" data-bs-toggle="tab" data-bs-target="#bookings" type="button">
+            Всі бронювання
+        </button>
+    </li>
+</ul>
+Користувацький інтерфейс організовано за принципом двоколонного макету. Ліва колонка містить блок «Мої бронювання» та кнопки для додавання нових об’єктів, що забезпечує швидкий доступ до персональної інформації та дій. 
+Права колонка відображає доступні паркінги у вигляді карток із ключовими характеристиками, що полегшує візуальне сприйняття та навігацію. Структура макету представлена нижче:
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <!-- Мої бронювання та Дії -->
+    </div>
+    <div class="col-md-8">
+        <!-- Доступні паркінги -->
+    </div>
+</div>
+Структура інтерфейсу забезпечує чітке розмежування функціональних блоків для різних типів користувачів, підтримує адаптивність відображення та інтерактивність елементів, що підвищує зручність експлуатації системи.
+
+2.2.3 Опис створення сторінок
+
+При створенні сторінок передбачено умовне відображення контенту залежно від ролі користувача. 
+Для адміністратора відображається відповідний інтерфейс з повним функціоналом керування паркінгами, транспортними засобами та бронюваннями, тоді як для звичайного користувача демонструється обмежений інтерфейс з доступом до власних бронювань та перегляду доступних паркінгів. 
+Це реалізується за допомогою умовного оператора у PHP:
+<?php if ($is_admin): ?>
+    <!-- АДМІН ІНТЕРФЕЙС -->
+<?php else: ?>
+    <!-- КОРИСТУВАЦЬКИЙ ІНТЕРФЕЙС -->
+<?php endif; ?>
+Відображення заповнення паркінгу здійснюється через компонент Progress з бібліотеки Bootstrap. Ширина смуги прогресу відповідає відсотковому співвідношенню зайнятих місць, а кольорове кодування підвищує наочність:
+<div class="progress" style="height: 20px;">
+    <div class="progress-bar bg-<?php echo $color; ?>" role="progressbar" style="width: <?php echo $percent; ?>%">
+        <?php echo (int)$row['capacity'] - (int)$row['available']; ?>/<?php echo (int)$row['capacity']; ?>
+    </div>
+</div>
+Для відображення статусів бронювань застосовуються компоненти Badge з різними кольорами, що дозволяє одразу визначити стан бронювання: активне, очікує підтвердження, завершене або скасоване. 
+Це забезпечує швидке візуальне сприйняття та зручність користування:
+<span class="badge bg-<?php echo $row['status'] == 'active' ? 'success' : ($row['status'] == 'pending' ? 'warning' : ($row['status'] == 'completed' ? 'secondary' : 'danger')); ?>">
+    <?php echo $row['status'] == 'pending' ? 'Очікує' : $row['status']; ?>
+</span>
+Модальні вікна для додавання та редагування об’єктів реалізовані за допомогою стандартних компонентів Bootstrap і містять форми для вводу всіх необхідних даних. 
+
+2.3 Розробка сценаріїв серверної частини
+2.3.1 Авторизація та реєстрація
+
+Серверна частина системи реалізована у вигляді API (`api.php`), яке обслуговує всі операції з даними. Архітектура побудована за принципом REST, де кожна операція викликається через HTTP-запит із вказівкою дії (`action`).
+Скрипт авторизації (`login.php`) забезпечує вхід користувачів у систему. Він містить форму для введення логіну та пароля. Після успішної авторизації користувач перенаправляється на головну сторінку. 
+На сторінці також передбачено модальне вікно для реєстрації нового користувача. Приклад реалізації авторизації наведено нижче:
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $username = $_POST['username'];
+    $password = $_POST['password'];
+
+    $sql = "SELECT * FROM users WHERE username = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result->num_rows > 0) {
+        $user = $result->fetch_assoc();
+        if (password_verify($password, $user['password'])) {
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['username'] = $user['username'];
+            $_SESSION['role'] = $user['role'];
+            header('Location: index.php');
+            exit;
+        } else {
+            $error = "Неправильний пароль";
+        }
+    } else {
+        $error = "Користувача не знайдено";
+    }
+}
+Скрипт реєстрації (`register.php`) перевіряє унікальність логіну та зберігає хешований пароль користувача:
+$username = $_POST['username'];
+$email = $_POST['email'];
+$password = password_hash($_POST['password'], PASSWORD_DEFAULT);
+
+$check = $conn->prepare("SELECT id FROM users WHERE username = ?");
+$check->bind_param("s", $username);
+$check->execute();
+if ($check->get_result()->num_rows > 0) {
+    echo json_encode(['error' => 'Користувач вже існує']);
+    exit;
+}
+
+$sql = "INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, 'user')";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("sss", $username, $email, $password);
+Скрипт виходу (`logout.php`) знищує сесію користувача та перенаправляє його на сторінку авторизації:
+session_start();
+session_destroy();
+header('Location: login.php');
+exit;
+
+
+
+2.3.2 API та головна сторінка
+
+Скрипт API (`api.php`) є центральним елементом серверної логіки системи. Він обробляє всі запити на додавання, редагування, видалення та отримання даних, забезпечує перевірку авторизації та контроль прав доступу:
+$action = $_GET['action'] ?? '';
+
+// Перевірка авторизації для всіх дій
+if (!isset($_SESSION['user_id'])) {
+    http_response_code(401);
+    echo json_encode(['error' => 'Необхідна авторизація']);
+    exit;
+}
+
+$is_admin = (isset($_SESSION['role']) && $_SESSION['role'] === 'admin');
+Сторінка головного інтерфейсу (`index.php`) відображає інтерфейс залежно від ролі користувача. Адміністратори отримують панель управління, тоді як звичайні користувачі бачать інтерфейс для бронювання паркувальних місць:
+// Перевірка авторизації
+if (!isset($_SESSION['user_id'])) {
+    header('Location: login.php');
+    exit;
+}
+
+// Отримання ролі користувача
+$user_sql = "SELECT role FROM users WHERE id = ?";
+$user_stmt = $conn->prepare($user_sql);
+$user_stmt->bind_param("i", $_SESSION['user_id']);
+$user_stmt->execute();
+$user_result = $user_stmt->get_result();
+$user = $user_result->fetch_assoc();
+$is_admin = ($user['role'] == 'admin');
+
+2.3.3 Модальні вікна та стилі
+
+Скрипт модальних вікон (`modals.php`) містить усі модальні вікна для додавання та редагування об'єктів системи. Кожне модальне вікно містить форму з відповідними полями для введення даних. Наприклад, модальне вікно для додавання нового паркінгу реалізоване наступним чином:
+<div class="modal fade" id="addParkingModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Додати паркінг</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addParkingForm">
+                    <div class="mb-3">
+                        <label class="form-label">Назва</label>
+                        <input type="text" class="form-control" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Адреса</label>
+                        <input type="text" class="form-control" name="address" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Місткість</label>
+                        <input type="number" class="form-control" name="capacity" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Доступно місць</label>
+                        <input type="number" class="form-control" name="available" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Зображення</label>
+                        <input type="file" class="form-control" name="image">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Скасувати</button>
+                <button type="button" class="btn btn-primary" id="saveParkingBtn">Зберегти</button>
+            </div>
+        </div>
+    </div>
+</div>
+Додаткові стилі для покращення вигляду системи розміщені у файлі `css/style.css` і включають стилі для карток, таблиць, прогрес-барів, модальних вікон та адаптивних елементів.
+
+2.3.4 Клієнтська логіка та взаємодія
+
+Файл `js/script.js` містить код для обробки подій на клієнтській стороні. Він забезпечує відправку AJAX-запитів, обробку форм та взаємодію з API. 
+Для зручності додані універсальні функції для обробки форм та безпечного додавання обробників подій:
+function addSafeListener(id, event, callback) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener(event, callback);
+}
+
+function setupAjaxForm(buttonId, formId, action) {
+    addSafeListener(buttonId, 'click', function() {
+        const form = document.getElementById(formId);
+        if (!form) return;
+        const formData = new FormData(form);
+        fetch(`api.php?action=${action}`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) location.reload();
+            else alert('Помилка: ' + (data.error || 'Невідома помилка'));
+        })
+        .catch(err => console.error('Помилка мережі:', err));
+    });
+}
+
+// Ініціалізація кнопок
+setupAjaxForm('saveParkingBtn', 'addParkingForm', 'add_parking');
+setupAjaxForm('updateParkingBtn', 'editParkingForm', 'update_parking');
+setupAjaxForm('saveVehicleBtn', 'addVehicleForm', 'add_vehicle');
+setupAjaxForm('updateVehicleBtn', 'editVehicleForm', 'update_vehicle');
+setupAjaxForm('saveBookingBtn', 'addBookingForm', 'add_booking');
+setupAjaxForm('updateBookingBtn', 'editBookingForm', 'update_booking');
+setupAjaxForm('registerBtn', 'registerForm', 'register');
+
+Редагування даних здійснюється через модальні вікна, які заповнюються інформацією обраного об’єкта за допомогою AJAX-запитів:
+document.querySelectorAll('.btn-edit-parking').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const id = this.getAttribute('data-id');
+        fetch(`api.php?action=get_parking&id=${id}`)
+            .then(res => res.json())
+            .then(data => {
+                const form = document.getElementById('editParkingForm');
+                form.querySelector('[name="id"]').value = data.id;
+                form.querySelector('[name="name"]').value = data.name;
+                form.querySelector('[name="address"]').value = data.address;
+                form.querySelector('[name="capacity"]').value = data.capacity;
+                form.querySelector('[name="available"]').value = data.available;
+                
+                const modal = new bootstrap.Modal(document.getElementById('editParkingModal'));
+                modal.show();
+            });
+    });
+});
+
+2.4 Результат роботи програми
+
+На початку користувача зустрічає сторінка авторизації (рис. 2.2), на якій необхідно ввести логін та пароль для входу в систему. 
+
+
+Рисунок 2.2 – Сторінка авторизації 
+Після успішної авторизації користувач потрапляє на головну сторінку. Для адміністратора відображається панель управління з вкладками: Паркінги, Транспорт, Всі бронювання (рис. 2.3). 
+На вкладці "Паркінги" адміністратор може переглядати список усіх паркінгів, додавати нові, редагувати та видаляти існуючі. Для кожного паркінгу відображається прогрес заповнення з кольоровим кодуванням для наочності.
+
+
+Рисунок 2.3 – Адміністративна панель, вкладка "Паркінги"
+
+На вкладці "Транспорт" (рис. 2.4) адміністратор переглядає всі транспортні засоби в системі та має можливість додавати нові, редагувати чи видаляти існуючі записи. 
+Для кожного транспортного засобу відображаються номер, марка, модель, колір та місце розташування.
+
+Рисунок 2.4 – Адміністративна панель, вкладка "Транспорт"
+
+На вкладці "Всі бронювання" (рис. 2.5) адміністратор контролює всі бронювання в системі: підтверджує або відхиляє нові, редагує та видаляє наявні записи.
+
+
+Рисунок 2.5 – Адміністративна панель, вкладка "Всі бронювання"
+
+
+Для звичайного користувача (рис. 2.6) відображається інтерфейс для бронювання паркувальних місць. 
+Ліва колонка містить розділ "Мої бронювання" та кнопки для додавання транспортного засобу й бронювання місця. 
+Права колонка демонструє доступні паркінги у вигляді карток.
+
+
+Рисунок 2.6 – Користувацький інтерфейс
+
+Користувач може переглянути деталі паркінгу та забронювати місце, натиснувши кнопку "Забронювати" (рис. 2.7). Відкривається модальне вікно для вибору транспортного засобу та періоду бронювання.
+
+Рисунок 2.7 – Модальне вікно для бронювання паркувального
+
+Після успішного бронювання запис відображається в розділі "Мої бронювання" зі статусом "Очікує підтвердження" (рис. 2.8). Після підтвердження адміністратором статус змінюється на "Активне"
+
+Рисунок 2.8 – Список бронювань користувача з відображенням статусів 
+
+Система забезпечує повний цикл роботи з паркувальними місцями: від реєстрації користувачів і додавання транспортних засобів до бронювання місць та контролю їх використання. 
+Адміністратор має повний контроль над усіма об’єктами системи, тоді як звичайні користувачі можуть виконувати лише операції, пов’язані з їхніми обліковими записами.
+
+
+
