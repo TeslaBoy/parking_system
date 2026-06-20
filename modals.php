@@ -2,7 +2,7 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg rounded-4">
             <div class="modal-header bg-dark text-white border-0 rounded-top-4 p-4">
-                <h5 class="modal-title fw-bold"><i class="bi bi-calendar-check"></i> Оформлення бронювання</h5>
+                <h5 class="modal-title fw-bold text-white"><i class="text-white bi bi-calendar-check"></i> Оформлення бронювання</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-4 bg-light">

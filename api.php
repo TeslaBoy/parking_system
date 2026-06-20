@@ -152,24 +152,26 @@ switch ($action) {
         $user_id = $_SESSION['user_id'];
         $parking_id = $_POST['parking_id'];
         $vehicle_id = $_POST['vehicle_id'];
-        $start_time = $_POST['start_time'];
-        $end_time = $_POST['end_time'];
+        
+        $start_timestamp = strtotime($_POST['start_time']);
+        $end_timestamp = strtotime($_POST['end_time']);
+        
+        // ЖОРСТКЕ ФОРМАТУВАННЯ ЧАСУ ДЛЯ SQL
+        $start_sql = date('Y-m-d H:i:s', $start_timestamp);
+        $end_sql = date('Y-m-d H:i:s', $end_timestamp);
 
         $conn->begin_transaction();
         try {
-            $start_timestamp = strtotime($start_time);
-            $end_timestamp = strtotime($end_time);
-            
             if ($start_timestamp % 1800 !== 0 || $end_timestamp % 1800 !== 0) throw new Exception("Час має бути кратним 30 хвилинам.");
             if ($end_timestamp <= $start_timestamp) throw new Exception("Час виїзду має бути пізнішим за час заїзду.");
             if (($end_timestamp - $start_timestamp) < 1800) throw new Exception("Мінімальний час паркування становить 30 хвилин.");
 
-            // Перевірка авто
+            // Перевірка авто з відформатованим часом
             $veh_stmt = $conn->prepare("SELECT p.name FROM bookings b JOIN parking_places p ON b.parking_id = p.id WHERE b.vehicle_id = ? AND b.status IN ('pending', 'active') AND b.start_time < ? AND b.end_time > ?");
-            $veh_stmt->bind_param("iss", $vehicle_id, $end_time, $start_time);
+            $veh_stmt->bind_param("iss", $vehicle_id, $end_sql, $start_sql);
             $veh_stmt->execute();
             $veh_res = $veh_stmt->get_result();
-            if ($veh_res->num_rows > 0) throw new Exception("Авто вже заброньовано на цей час (Локація: " . $veh_res->fetch_assoc()['name'] . ").");
+            if ($veh_res->num_rows > 0) throw new Exception("Ваше авто вже заброньовано на цей час (Локація: " . $veh_res->fetch_assoc()['name'] . ").");
 
             // Перевірка місткості
             $park_check = $conn->prepare("SELECT capacity, price_per_hour FROM parking_places WHERE id = ? FOR UPDATE");
@@ -178,7 +180,7 @@ switch ($action) {
             $parking = $park_check->get_result()->fetch_assoc();
 
             $cap_stmt = $conn->prepare("SELECT COUNT(*) as concurrent FROM bookings WHERE parking_id = ? AND status IN ('pending', 'active') AND start_time < ? AND end_time > ?");
-            $cap_stmt->bind_param("iss", $parking_id, $end_time, $start_time);
+            $cap_stmt->bind_param("iss", $parking_id, $end_sql, $start_sql);
             $cap_stmt->execute();
             if ($cap_stmt->get_result()->fetch_assoc()['concurrent'] >= $parking['capacity']) {
                 throw new Exception("На цей час паркінг повністю заповнений.");
@@ -186,10 +188,16 @@ switch ($action) {
 
             $total_price = (($end_timestamp - $start_timestamp) / 3600) * $parking['price_per_hour'];
 
+            // Збереження бронювання
             $stmt = $conn->prepare("INSERT INTO bookings (user_id, parking_id, vehicle_id, start_time, end_time, total_price, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')");
-            $stmt->bind_param("iiissd", $user_id, $parking_id, $vehicle_id, $start_time, $end_time, $total_price);
+            $stmt->bind_param("iiissd", $user_id, $parking_id, $vehicle_id, $start_sql, $end_sql, $total_price);
             $stmt->execute();
             $new_id = $stmt->insert_id;
+
+            // Оновлення локації транспортного засобу
+            $upd_veh = $conn->prepare("UPDATE vehicles SET parking_id = ? WHERE id = ?");
+            $upd_veh->bind_param("ii", $parking_id, $vehicle_id);
+            $upd_veh->execute();
 
             $conn->commit();
             sync_parking_availability($conn, $parking_id);
@@ -202,23 +210,25 @@ switch ($action) {
 
     case 'update_booking':
         $id = $_POST['id']; $new_parking_id = $_POST['parking_id']; $vehicle_id = $_POST['vehicle_id'];
-        $start_time = $_POST['start_time']; $end_time = $_POST['end_time']; $status = $_POST['status'];
+        $status = $_POST['status'];
+
+        $start_timestamp = strtotime($_POST['start_time']);
+        $end_timestamp = strtotime($_POST['end_time']);
+        $start_sql = date('Y-m-d H:i:s', $start_timestamp);
+        $end_sql = date('Y-m-d H:i:s', $end_timestamp);
 
         $conn->begin_transaction();
         try {
-            $start_timestamp = strtotime($start_time);
-            $end_timestamp = strtotime($end_time);
-            
             if ($start_timestamp % 1800 !== 0 || $end_timestamp % 1800 !== 0) throw new Exception("Час має бути кратним 30 хвилинам.");
             if (($end_timestamp - $start_timestamp) < 1800) throw new Exception("Мінімум 30 хвилин.");
 
             $veh_stmt = $conn->prepare("SELECT id FROM bookings WHERE vehicle_id = ? AND id != ? AND status IN ('pending', 'active') AND start_time < ? AND end_time > ?");
-            $veh_stmt->bind_param("iiss", $vehicle_id, $id, $end_time, $start_time);
+            $veh_stmt->bind_param("iiss", $vehicle_id, $id, $end_sql, $start_sql);
             $veh_stmt->execute();
             if ($veh_stmt->get_result()->num_rows > 0) throw new Exception("Авто вже заброньовано деінде на цей час.");
 
             $cap_stmt = $conn->prepare("SELECT COUNT(*) as concurrent FROM bookings WHERE parking_id = ? AND id != ? AND status IN ('pending', 'active') AND start_time < ? AND end_time > ?");
-            $cap_stmt->bind_param("iiss", $new_parking_id, $id, $end_time, $start_time);
+            $cap_stmt->bind_param("iiss", $new_parking_id, $id, $end_sql, $start_sql);
             $cap_stmt->execute();
             $concurrent = $cap_stmt->get_result()->fetch_assoc()['concurrent'];
 
@@ -238,8 +248,19 @@ switch ($action) {
             $old_parking_id = $get_old->get_result()->fetch_assoc()['parking_id'];
 
             $stmt = $conn->prepare("UPDATE bookings SET parking_id = ?, vehicle_id = ?, start_time = ?, end_time = ?, total_price = ?, status = ? WHERE id = ?");
-            $stmt->bind_param("iissdsi", $new_parking_id, $vehicle_id, $start_time, $end_time, $total_price, $status, $id);
+            $stmt->bind_param("iissdsi", $new_parking_id, $vehicle_id, $start_sql, $end_sql, $total_price, $status, $id);
             $stmt->execute();
+
+            // Оновлення локації транспортного засобу залежно від статусу
+            if (in_array($status, ['pending', 'active'])) {
+                $upd_veh = $conn->prepare("UPDATE vehicles SET parking_id = ? WHERE id = ?");
+                $upd_veh->bind_param("ii", $new_parking_id, $vehicle_id);
+                $upd_veh->execute();
+            } else {
+                $upd_veh = $conn->prepare("UPDATE vehicles SET parking_id = NULL WHERE id = ?");
+                $upd_veh->bind_param("i", $vehicle_id);
+                $upd_veh->execute();
+            }
 
             $conn->commit();
             sync_parking_availability($conn, $old_parking_id);
@@ -255,15 +276,24 @@ switch ($action) {
     case 'delete_booking':
         try {
             $id = $_GET['id'];
-            $get_stmt = $conn->prepare("SELECT parking_id FROM bookings WHERE id = ?");
+            $get_stmt = $conn->prepare("SELECT parking_id, vehicle_id FROM bookings WHERE id = ?");
             $get_stmt->bind_param("i", $id); 
             $get_stmt->execute();
             $res = $get_stmt->get_result()->fetch_assoc();
+            
             $pid = $res ? $res['parking_id'] : null;
+            $vid = $res ? $res['vehicle_id'] : null;
 
             $stmt = $conn->prepare("DELETE FROM bookings WHERE id = ?");
             $stmt->bind_param("i", $id); 
             $stmt->execute();
+
+            // Звільняємо авто
+            if ($vid) {
+                $upd_veh = $conn->prepare("UPDATE vehicles SET parking_id = NULL WHERE id = ?");
+                $upd_veh->bind_param("i", $vid);
+                $upd_veh->execute();
+            }
             
             if ($pid) sync_parking_availability($conn, $pid);
             echo json_encode(['success' => true]);
@@ -277,15 +307,30 @@ switch ($action) {
         try {
             $id = $_POST['id']; $status = $_POST['status'];
 
-            $get_stmt = $conn->prepare("SELECT parking_id FROM bookings WHERE id = ?");
+            $get_stmt = $conn->prepare("SELECT parking_id, vehicle_id FROM bookings WHERE id = ?");
             $get_stmt->bind_param("i", $id); 
             $get_stmt->execute();
             $res = $get_stmt->get_result()->fetch_assoc();
+            
             $pid = $res ? $res['parking_id'] : null;
+            $vid = $res ? $res['vehicle_id'] : null;
 
             $stmt = $conn->prepare("UPDATE bookings SET status = ? WHERE id = ?");
             $stmt->bind_param("si", $status, $id); 
             $stmt->execute();
+
+            // Оновлення локації авто залежно від рішення адміна
+            if ($vid) {
+                if (in_array($status, ['pending', 'active'])) {
+                    $upd_veh = $conn->prepare("UPDATE vehicles SET parking_id = ? WHERE id = ?");
+                    $upd_veh->bind_param("ii", $pid, $vid);
+                    $upd_veh->execute();
+                } else {
+                    $upd_veh = $conn->prepare("UPDATE vehicles SET parking_id = NULL WHERE id = ?");
+                    $upd_veh->bind_param("i", $vid);
+                    $upd_veh->execute();
+                }
+            }
             
             if ($pid) sync_parking_availability($conn, $pid);
             echo json_encode(['success' => true]);

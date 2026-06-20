@@ -105,10 +105,7 @@ function setupAjaxForm(buttonId, formId, action, modalId) {
         .then(async res => {
             const textData = await res.text();
             try { return JSON.parse(textData); } 
-            catch (err) {
-                console.error("ОТРИМАНО ПОМИЛКУ ВІД СЕРВЕРА (замість JSON):", textData);
-                throw new Error("Внутрішня помилка сервера. Перевірте консоль для деталей.");
-            }
+            catch (err) { throw new Error("Внутрішня помилка сервера. Перевірте консоль для деталей."); }
         })
         .then(data => {
             if (data.success) {
@@ -176,7 +173,6 @@ async function updateUI() {
             initDataTables();
         }
 
-        // БЕЗПЕЧНА заміна модалок
         ['addBookingModal', 'editBookingModal', 'addVehicleModal', 'editVehicleModal', 'addParkingModal', 'editParkingModal'].forEach(id => {
             const currentModal = document.getElementById(id);
             const newModal = doc.getElementById(id);
@@ -217,7 +213,6 @@ document.addEventListener('change', function(e) {
             d.setMinutes(m); d.setSeconds(0); d.setMilliseconds(0);
             d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
             e.target.value = d.toISOString().slice(0, 16);
-            showToast('info', 'Час округлено до 30 хвилин');
         }
     }
 
@@ -301,13 +296,48 @@ document.addEventListener('click', function(e) {
         return;
     }
 
+    // === "МАГІЧНЕ" АВТОЗАПОВНЕННЯ ЧАСУ ПРИ БРОНЮВАННІ ===
     const btnPrepare = e.target.closest('.btn-prepare-booking');
     if (btnPrepare) {
         setVal('bookingHiddenParkingId', btnPrepare.dataset.id);
         setText('displayParkingName', btnPrepare.dataset.name);
         currentParkingPrice = parseFloat(btnPrepare.dataset.price) || 0;
         setText('displayParkingPrice', currentParkingPrice.toFixed(2));
-        setVal('bookingStartTime', ''); setVal('bookingEndTime', ''); setText('estimatedPrice', '0.00 ₴');
+
+        // Беремо час з фільтра (або поточний)
+        const filterInput = document.querySelector('.time-filter-input');
+        let baseDate = new Date();
+        if (filterInput && filterInput.value) {
+            const fDate = new Date(filterInput.value);
+            if (fDate > baseDate) baseDate = fDate; // Використовуємо фільтр тільки якщо він у майбутньому
+        }
+
+        // Округлюємо до ближчих 30 хвилин
+        let m = baseDate.getMinutes();
+        if (m > 0 && m <= 30) baseDate.setMinutes(30); 
+        else if (m > 30) { baseDate.setHours(baseDate.getHours() + 1); baseDate.setMinutes(0); }
+        baseDate.setSeconds(0); baseDate.setMilliseconds(0);
+
+        const tzOffset = baseDate.getTimezoneOffset() * 60000;
+        const localStart = new Date(baseDate.getTime() - tzOffset).toISOString().slice(0, 16);
+        
+        // Виїзд за замовчуванням через 1 годину
+        baseDate.setHours(baseDate.getHours() + 1);
+        const localEnd = new Date(baseDate.getTime() - tzOffset).toISOString().slice(0, 16);
+
+        setVal('bookingStartTime', localStart);
+        setVal('bookingEndTime', localEnd);
+        setText('estimatedPrice', currentParkingPrice.toFixed(2) + ' ₴');
+        
+        // Встановлюємо мінімальні обмеження
+        const now = new Date();
+        let nm = now.getMinutes();
+        if (nm > 0 && nm <= 30) now.setMinutes(30); else if (nm > 30) { now.setHours(now.getHours() + 1); now.setMinutes(0); }
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        
+        document.getElementById('bookingStartTime').min = now.toISOString().slice(0, 16);
+        document.getElementById('bookingEndTime').min = localStart;
+
         return;
     }
 
@@ -340,7 +370,6 @@ document.addEventListener('click', function(e) {
         }); return;
     }
 
-    // ВИДАЛЕННЯ З БЕЗПЕЧНИМ ПАРСИНГОМ ПОМИЛОК
     const btnDelete = e.target.closest('.btn-delete-parking, .btn-delete-vehicle, .btn-delete-booking');
     if (btnDelete) {
         let action = null, id = btnDelete.dataset.id, text = '';
@@ -356,12 +385,8 @@ document.addEventListener('click', function(e) {
                 fetch(`api.php?action=${action}&id=${id}`)
                 .then(async res => {
                     const textData = await res.text();
-                    try {
-                        return JSON.parse(textData);
-                    } catch (err) {
-                        console.error("ОТРИМАНО ПОМИЛКУ ВІД СЕРВЕРА (замість JSON):", textData);
-                        throw new Error("Внутрішня помилка сервера. Можливо, об'єкт містить пов'язані дані.");
-                    }
+                    try { return JSON.parse(textData); } 
+                    catch (err) { throw new Error("Внутрішня помилка сервера. Можливо, об'єкт містить пов'язані дані."); }
                 })
                 .then(data => {
                     if (data.success) { showToast('success', 'Успішно видалено!'); updateUI(); } 
@@ -372,7 +397,6 @@ document.addEventListener('click', function(e) {
         }); return;
     }
 
-    // ЗМІНА СТАТУСУ З БЕЗПЕЧНИМ ПАРСИНГОМ ПОМИЛОК
     const btnStatus = e.target.closest('.btn-confirm-booking, .btn-reject-booking');
     if (btnStatus) {
         const id = btnStatus.dataset.id;

@@ -7,9 +7,26 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+// === ПОКРАЩЕНИЙ ПСЕВДО-CRON ===
 $conn->begin_transaction();
 try {
-    $conn->query("UPDATE bookings SET status = 'completed' WHERE status = 'active' AND end_time < NOW()");
+    // Спочатку знаходимо ті бронювання, час яких щойно вийшов
+    $expired_bookings = $conn->query("SELECT id, vehicle_id FROM bookings WHERE status = 'active' AND end_time < NOW()");
+    
+    if ($expired_bookings && $expired_bookings->num_rows > 0) {
+        while ($eb = $expired_bookings->fetch_assoc()) {
+            $b_id = (int)$eb['id'];
+            $v_id = (int)$eb['vehicle_id'];
+            
+            // Завершуємо бронювання
+            $conn->query("UPDATE bookings SET status = 'completed' WHERE id = $b_id");
+            
+            // Звільняємо автомобіль з паркінгу
+            $conn->query("UPDATE vehicles SET parking_id = NULL WHERE id = $v_id");
+        }
+    }
+
+    // Перераховуємо вільні місця для всіх паркінгів
     $conn->query("UPDATE parking_places p SET available = capacity - (
         SELECT COUNT(*) FROM bookings b 
         WHERE b.parking_id = p.id AND b.status IN ('pending', 'active') 
@@ -17,6 +34,7 @@ try {
     )");
     $conn->commit();
 } catch (Exception $e) { $conn->rollback(); }
+// ===============================
 
 // === ЛОГІКА ФІЛЬТРАЦІЇ ЧАСУ ===
 $check_time = isset($_GET['time']) ? $_GET['time'] : date('Y-m-d H:i');
@@ -41,18 +59,21 @@ $parkings_result = $conn->query($parkings_sql);
 if ($is_admin) {
     $vehicles_result = $conn->query("SELECT v.*, p.name as parking_name FROM vehicles v LEFT JOIN parking_places p ON v.parking_id = p.id ORDER BY v.id DESC");
     $stats['revenue'] = $conn->query("SELECT SUM(total_price) as total FROM bookings WHERE status IN ('completed','active')")->fetch_assoc()['total'] ?? 0;
-    $stats['active_bookings'] = $conn->query("SELECT COUNT(*) as count FROM bookings WHERE status = 'active'")->fetch_assoc()['count'] ?? 0;
+    
+    // Активні бронювання НА ОБРАНИЙ ЧАС
+    $stats['active_bookings'] = $conn->query("SELECT COUNT(*) as count FROM bookings WHERE status IN ('pending', 'active') AND start_time <= '$check_time_sql' AND end_time > '$check_time_sql'")->fetch_assoc()['count'] ?? 0;
+    
     $stats['total_vehicles'] = $conn->query("SELECT COUNT(*) as count FROM vehicles")->fetch_assoc()['count'] ?? 0;
     
     $cap = $conn->query("SELECT SUM(capacity) as total FROM parking_places")->fetch_assoc();
     $stats['total_capacity'] = $cap['total'] ?? 0; 
     
+    // Заповненість НА ОБРАНИЙ ЧАС
     $avail_sql = "SELECT SUM(capacity - (SELECT COUNT(*) FROM bookings b WHERE b.parking_id = p.id AND b.status IN ('pending', 'active') AND b.start_time <= '$check_time_sql' AND b.end_time > '$check_time_sql')) as avail FROM parking_places p";
     $stats['total_available'] = $conn->query($avail_sql)->fetch_assoc()['avail'] ?? 0;
     
     $stats['occupancy_rate'] = $stats['total_capacity'] > 0 ? round((($stats['total_capacity'] - $stats['total_available']) / $stats['total_capacity']) * 100) : 0;
-    $stats['completed_today'] = $conn->query("SELECT COUNT(*) as count FROM bookings WHERE DATE(created_at) = CURDATE() AND status != 'cancelled'")->fetch_assoc()['count'] ?? 0;
-
+    
     $chart_res = $conn->query("SELECT name, capacity, 
         (capacity - (SELECT COUNT(*) FROM bookings b WHERE b.parking_id = p.id AND b.status IN ('pending', 'active') AND b.start_time <= '$check_time_sql' AND b.end_time > '$check_time_sql')) as dynamic_available 
         FROM parking_places p ORDER BY id ASC");
@@ -93,10 +114,10 @@ include 'header.php';
     <div class="tab-content" id="adminTabsContent">
         <div class="tab-pane fade show active" id="admin-dash">
             <div class="row g-4 mb-4">
-                <div class="col-xl-3 col-md-6"><div class="stat-card stat-success"><div class="stat-icon"><i class="bi bi-currency-uah"></i></div><div class="stat-content"><span class="stat-label">Дохід</span><span class="stat-value"><?php echo number_format($stats['revenue'],0); ?> ₴</span></div></div></div>
-                <div class="col-xl-3 col-md-6"><div class="stat-card stat-primary"><div class="stat-icon"><i class="bi bi-car-front-fill"></i></div><div class="stat-content"><span class="stat-label">Активні паркування</span><span class="stat-value"><?php echo $stats['active_bookings']; ?></span></div></div></div>
-                <div class="col-xl-3 col-md-6"><div class="stat-card stat-info"><div class="stat-icon"><i class="bi bi-car"></i></div><div class="stat-content"><span class="stat-label">Транспорту</span><span class="stat-value"><?php echo $stats['total_vehicles']; ?></span></div></div></div>
-                <div class="col-xl-3 col-md-6"><div class="stat-card stat-warning"><div class="stat-icon"><i class="bi bi-building"></i></div><div class="stat-content"><span class="stat-label">Заповненість (Обраний час)</span><span class="stat-value"><?php echo $stats['occupancy_rate']; ?>%</span></div></div></div>
+                <div class="col-xl-3 col-md-6"><div class="stat-card stat-success"><div class="stat-icon"><i class="bi bi-currency-uah"></i></div><div class="stat-content"><span class="stat-label">Загальний Дохід</span><span class="stat-value"><?php echo number_format($stats['revenue'],0); ?> ₴</span></div></div></div>
+                <div class="col-xl-3 col-md-6"><div class="stat-card stat-primary"><div class="stat-icon"><i class="bi bi-car-front-fill"></i></div><div class="stat-content"><span class="stat-label">Авто на локаціях</span><span class="stat-value"><?php echo $stats['active_bookings']; ?></span><span class="text-muted small">На <?php echo date('H:i', strtotime($check_time)); ?></span></div></div></div>
+                <div class="col-xl-3 col-md-6"><div class="stat-card stat-info"><div class="stat-icon"><i class="bi bi-car"></i></div><div class="stat-content"><span class="stat-label">Всього транспорту</span><span class="stat-value"><?php echo $stats['total_vehicles']; ?></span></div></div></div>
+                <div class="col-xl-3 col-md-6"><div class="stat-card stat-warning"><div class="stat-icon"><i class="bi bi-building"></i></div><div class="stat-content"><span class="stat-label">Заповненість</span><span class="stat-value"><?php echo $stats['occupancy_rate']; ?>%</span><span class="text-muted small">На <?php echo date('H:i', strtotime($check_time)); ?></span></div></div></div>
             </div>
 
             <div class="row g-4 mb-4">
@@ -104,9 +125,9 @@ include 'header.php';
                     <div class="card chart-card border-0 shadow-sm">
                         <div class="card-header bg-white border-0 py-3 d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
                             <h5 class="card-title mb-0"><i class="bi bi-bar-chart-fill text-primary me-2"></i>Завантаженість паркінгів</h5>
-                            <div class="d-flex align-items-center bg-light p-1 px-2 rounded border">
-                                <label class="me-2 small text-muted fw-bold mb-0 text-nowrap"><i class="bi bi-clock-history"></i> Станом на:</label>
-                                <input type="datetime-local" class="form-control form-control-sm border-0 bg-transparent time-filter-input text-primary fw-bold p-0" style="outline: none; box-shadow: none;" value="<?php echo date('Y-m-d\TH:i', strtotime($check_time)); ?>">
+                            <div class="d-flex align-items-center bg-light p-1 px-2 rounded border border-primary border-opacity-25 shadow-sm">
+                                <label class="me-2 small text-primary fw-bold mb-0 text-nowrap"><i class="bi bi-clock-history"></i> Час статистики:</label>
+                                <input type="datetime-local" class="form-control form-control-sm border-0 bg-transparent time-filter-input text-dark fw-bold p-0" style="outline: none; box-shadow: none;" value="<?php echo date('Y-m-d\TH:i', strtotime($check_time)); ?>">
                             </div>
                         </div>
                         <div class="card-body"><div class="chart-container" style="height:320px;"><canvas id="occupancyChart"></canvas></div></div>
@@ -125,7 +146,6 @@ include 'header.php';
                 </div>
                 <div class="card-body p-0"><div class="table-responsive"><table class="table table-hover align-middle mb-0" id="parkingsTable"><thead class="table-light"><tr><th class="ps-4">Паркінг</th><th>Адреса</th><th>Тариф</th><th>Місця (на обраний час)</th><th>Заповненість</th><th class="text-end pe-4">Дії</th></tr></thead><tbody>
                     <?php $parkings_result->data_seek(0); while($row = $parkings_result->fetch_assoc()):
-                        // ВИКОРИСТОВУЄМО dynamic_available ЗАМІСТЬ available
                         $pct = $row['capacity'] > 0 ? round((($row['capacity'] - $row['dynamic_available']) / $row['capacity']) * 100) : 0;
                         $bc = $pct > 90 ? 'danger' : ($pct > 50 ? 'warning' : 'success');
                     ?>
@@ -163,8 +183,7 @@ include 'header.php';
             <div class="card management-card border-0 shadow-sm">
                 <div class="card-header bg-white border-0 py-3"><h5 class="card-title mb-0">Всі бронювання</h5></div>
                 <div class="card-body p-0"><div class="table-responsive"><table class="table table-hover align-middle mb-0" id="bookingsTable"><thead class="table-light"><tr><th class="ps-4">Користувач</th><th>Авто</th><th>Паркінг</th><th>Час</th><th>Сума</th><th>Статус</th><th class="text-end pe-4">Дії</th></tr></thead><tbody>
-                    <?php $all_b = $conn->query("SELECT b.*, u.username, p.name as parking_name, v.license_plate FROM bookings b JOIN users u ON b.user_id = u.id JOIN parking_places p ON b.parking_id = p.id JOIN vehicles v ON b.vehicle_id = v.id ORDER BY b.start_time DESC");
-                    while($row = $all_b->fetch_assoc()): ?>
+                    <?php $bookings_result->data_seek(0); while($row = $bookings_result->fetch_assoc()): ?>
                     <tr>
                         <td class="ps-4"><?php echo htmlspecialchars($row['username']); ?></td>
                         <td><span class="badge bg-dark"><?php echo htmlspecialchars($row['license_plate']); ?></span></td>
@@ -202,14 +221,13 @@ include 'header.php';
             <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center mb-4 gap-3">
                 <h5 class="mb-0 text-secondary fw-bold"><i class="bi bi-geo-alt-fill me-2"></i>Оберіть локацію</h5>
                 <div class="d-flex align-items-center bg-white p-2 rounded-3 shadow-sm border border-primary border-opacity-25">
-                    <label class="me-2 small text-primary fw-bold mb-0 text-nowrap"><i class="bi bi-clock-history"></i> Перевірити заповненість на:</label>
+                    <label class="me-2 small text-primary fw-bold mb-0 text-nowrap"><i class="bi bi-clock-history"></i> Заповненість на час:</label>
                     <input type="datetime-local" class="form-control form-control-sm border-0 bg-transparent time-filter-input text-dark fw-bold p-0" style="outline: none; box-shadow: none;" value="<?php echo date('Y-m-d\TH:i', strtotime($check_time)); ?>">
                 </div>
             </div>
 
             <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
                 <?php $parkings_result->data_seek(0); while($row = $parkings_result->fetch_assoc()):
-                    // ВИКОРИСТОВУЄМО dynamic_available
                     $pct = $row['capacity'] > 0 ? round((($row['capacity'] - $row['dynamic_available']) / $row['capacity']) * 100) : 0;
                     $bc = $pct > 90 ? 'danger' : ($pct > 50 ? 'warning' : 'success');
                     $isFull = (int)$row['dynamic_available'] <= 0;
