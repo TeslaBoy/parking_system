@@ -1,11 +1,14 @@
 <?php
 session_start();
 require_once 'config.php';
-require_once 'classes/Uploader.php'; // Підключаємо наш новий клас
-
-header('Content-Type: application/json');
+require_once 'classes/Uploader.php'; 
 
 $action = $_GET['action'] ?? '';
+
+// Якщо це не експорт файлу, повертаємо JSON
+if ($action !== 'export_bookings') {
+    header('Content-Type: application/json');
+}
 
 // Публічні дії (доступні без входу)
 if ($action === 'register') {
@@ -35,6 +38,7 @@ if ($action === 'register') {
 
 // Перевірка авторизації для всіх інших дій
 if (!isset($_SESSION['user_id'])) {
+    if ($action === 'export_bookings') { die('Необхідна авторизація'); }
     http_response_code(401);
     echo json_encode(['error' => 'Необхідна авторизація']);
     exit;
@@ -44,43 +48,30 @@ $is_admin = (isset($_SESSION['role']) && $_SESSION['role'] === 'admin');
 
 switch ($action) {
     case 'add_parking':
-        if (!$is_admin) {
-            http_response_code(403);
-            echo json_encode(['error' => 'Доступ заборонено']);
-            exit;
-        }
+        if (!$is_admin) { http_response_code(403); echo json_encode(['error' => 'Доступ заборонено']); exit; }
         $name = $_POST['name'];
         $address = $_POST['address'];
         $capacity = $_POST['capacity'];
         $available = $_POST['available'];
         $price_per_hour = $_POST['price_per_hour'] ?? 0;
         
-        // Нове безпечне завантаження через клас
         $uploader = new Uploader();
         try {
             $image = $uploader->uploadImage('image');
         } catch (Exception $e) {
-            echo json_encode(['error' => $e->getMessage()]);
-            exit;
+            echo json_encode(['error' => $e->getMessage()]); exit;
         }
 
         $sql = "INSERT INTO parking_places (name, address, capacity, available, price_per_hour, image) VALUES (?, ?, ?, ?, ?, ?)";
         $stmt = $conn->prepare($sql);
         $stmt->bind_param("ssiids", $name, $address, $capacity, $available, $price_per_hour, $image);
 
-        if ($stmt->execute()) {
-            echo json_encode(['success' => true, 'id' => $stmt->insert_id]);
-        } else {
-            echo json_encode(['error' => $conn->error]);
-        }
+        if ($stmt->execute()) { echo json_encode(['success' => true, 'id' => $stmt->insert_id]); } 
+        else { echo json_encode(['error' => $conn->error]); }
         break;
 
     case 'update_parking':
-        if (!$is_admin) {
-            http_response_code(403);
-            echo json_encode(['error' => 'Доступ заборонено']);
-            exit;
-        }
+        if (!$is_admin) { http_response_code(403); echo json_encode(['error' => 'Доступ заборонено']); exit; }
         $id = $_POST['id'];
         $name = $_POST['name'];
         $address = $_POST['address'];
@@ -92,29 +83,19 @@ switch ($action) {
         $stmt = $conn->prepare($sql);
         $stmt->bind_param("ssiidi", $name, $address, $capacity, $available, $price_per_hour, $id);
 
-        if ($stmt->execute()) {
-            echo json_encode(['success' => true]);
-        } else {
-            echo json_encode(['error' => $conn->error]);
-        }
+        if ($stmt->execute()) { echo json_encode(['success' => true]); } 
+        else { echo json_encode(['error' => $conn->error]); }
         break;
 
     case 'delete_parking':
-        if (!$is_admin) {
-            http_response_code(403);
-            echo json_encode(['error' => 'Доступ заборонено']);
-            exit;
-        }
+        if (!$is_admin) { http_response_code(403); echo json_encode(['error' => 'Доступ заборонено']); exit; }
         $id = $_GET['id'];
         $sql = "DELETE FROM parking_places WHERE id = ?";
         $stmt = $conn->prepare($sql);
         $stmt->bind_param("i", $id);
 
-        if ($stmt->execute()) {
-            echo json_encode(['success' => true]);
-        } else {
-            echo json_encode(['error' => $conn->error]);
-        }
+        if ($stmt->execute()) { echo json_encode(['success' => true]); } 
+        else { echo json_encode(['error' => $conn->error]); }
         break;
 
     case 'add_vehicle':
@@ -125,24 +106,19 @@ switch ($action) {
         $color = $_POST['color'];
         $parking_id = !empty($_POST['parking_id']) ? $_POST['parking_id'] : null;
 
-        // Нове безпечне завантаження через клас
         $uploader = new Uploader();
         try {
             $image = $uploader->uploadImage('image');
         } catch (Exception $e) {
-            echo json_encode(['error' => $e->getMessage()]);
-            exit;
+            echo json_encode(['error' => $e->getMessage()]); exit;
         }
 
         $sql = "INSERT INTO vehicles (license_plate, brand, model, color, parking_id, image, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)";
         $stmt = $conn->prepare($sql);
         $stmt->bind_param("ssssisi", $license_plate, $brand, $model, $color, $parking_id, $image, $user_id);
 
-        if ($stmt->execute()) {
-            echo json_encode(['success' => true, 'id' => $stmt->insert_id]);
-        } else {
-            echo json_encode(['error' => $conn->error]);
-        }
+        if ($stmt->execute()) { echo json_encode(['success' => true, 'id' => $stmt->insert_id]); } 
+        else { echo json_encode(['error' => $conn->error]); }
         break;
 
     case 'update_vehicle':
@@ -157,11 +133,8 @@ switch ($action) {
         $stmt = $conn->prepare($sql);
         $stmt->bind_param("ssssii", $license_plate, $brand, $model, $color, $parking_id, $id);
 
-        if ($stmt->execute()) {
-            echo json_encode(['success' => true]);
-        } else {
-            echo json_encode(['error' => $conn->error]);
-        }
+        if ($stmt->execute()) { echo json_encode(['success' => true]); } 
+        else { echo json_encode(['error' => $conn->error]); }
         break;
 
     case 'delete_vehicle':
@@ -170,11 +143,8 @@ switch ($action) {
         $stmt = $conn->prepare($sql);
         $stmt->bind_param("i", $id);
 
-        if ($stmt->execute()) {
-            echo json_encode(['success' => true]);
-        } else {
-            echo json_encode(['error' => $conn->error]);
-        }
+        if ($stmt->execute()) { echo json_encode(['success' => true]); } 
+        else { echo json_encode(['error' => $conn->error]); }
         break;
 
     case 'add_booking':
@@ -187,7 +157,6 @@ switch ($action) {
         $conn->begin_transaction();
 
         try {
-            // Отримуємо дані паркінгу для перевірки місць та тарифу
             $check_sql = "SELECT available, capacity, price_per_hour FROM parking_places WHERE id = ? FOR UPDATE";
             $check_stmt = $conn->prepare($check_sql);
             $check_stmt->bind_param("i", $parking_id);
@@ -195,23 +164,16 @@ switch ($action) {
             $res = $check_stmt->get_result();
             $parking = $res->fetch_assoc();
 
-            if ($parking['available'] <= 0) {
-                throw new Exception("На жаль, на цьому паркінгу немає вільних місць.");
-            }
+            if ($parking['available'] <= 0) { throw new Exception("На жаль, на цьому паркінгу немає вільних місць."); }
 
-            // Розрахунок вартості
             $start_timestamp = strtotime($start_time);
             $end_timestamp = strtotime($end_time);
             
-            if ($end_timestamp <= $start_timestamp) {
-                throw new Exception("Час завершення має бути пізнішим за час початку.");
-            }
+            if ($end_timestamp <= $start_timestamp) { throw new Exception("Час завершення має бути пізнішим за час початку."); }
 
-            // Округлюємо кількість годин в більшу сторону
             $hours = ceil(($end_timestamp - $start_timestamp) / 3600);
             $total_price = $hours * $parking['price_per_hour'];
 
-            // Зменшення кількості вільних місць
             $update_sql = "UPDATE parking_places SET available = available - 1 WHERE id = ?";
             $update_stmt = $conn->prepare($update_sql);
             $update_stmt->bind_param("i", $parking_id);
@@ -251,7 +213,6 @@ switch ($action) {
                 $conn->query("UPDATE parking_places SET available = available - 1 WHERE id = " . (int)$new_parking_id);
             }
 
-            // Можна додати перерахунок ціни при оновленні, але поки залишаємо як є
             $sql = "UPDATE bookings SET parking_id = ?, vehicle_id = ?, start_time = ?, end_time = ?, status = ? WHERE id = ?";
             $stmt = $conn->prepare($sql);
             $stmt->bind_param("iisssi", $new_parking_id, $vehicle_id, $start_time, $end_time, $status, $id);
@@ -325,11 +286,7 @@ switch ($action) {
         break;
 
     case 'change_booking_status':
-        if (!$is_admin) {
-            http_response_code(403);
-            echo json_encode(['error' => 'Доступ заборонено']);
-            exit;
-        }
+        if (!$is_admin) { http_response_code(403); echo json_encode(['error' => 'Доступ заборонено']); exit; }
         $id = $_POST['id'];
         $status = $_POST['status'];
 
@@ -361,6 +318,46 @@ switch ($action) {
         }
         break;
 
+    // === НОВИЙ МЕТОД ЕКСПОРТУ В CSV ===
+    case 'export_bookings':
+        if (!$is_admin) {
+            http_response_code(403); exit("Доступ заборонено");
+        }
+        
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename=bookings_report_' . date('Y-m-d') . '.csv');
+        
+        $output = fopen('php://output', 'w');
+        
+        // Додаємо BOM (Byte Order Mark), щоб Excel правильно розумів кирилицю (UTF-8)
+        fputs($output, "\xEF\xBB\xBF");
+        
+        // Заголовки стовпців у файлі
+        fputcsv($output, ['ID', 'Користувач', 'Паркінг', 'Номер Авто', 'Початок', 'Кінець', 'Сума (грн)', 'Статус'], ';');
+
+        $sql = "SELECT b.id, u.username, p.name as parking_name, v.license_plate, b.start_time, b.end_time, b.total_price, b.status 
+                FROM bookings b 
+                JOIN users u ON b.user_id = u.id 
+                JOIN parking_places p ON b.parking_id = p.id 
+                JOIN vehicles v ON b.vehicle_id = v.id
+                ORDER BY b.id DESC";
+                
+        $res = $conn->query($sql);
+        while ($row = $res->fetch_assoc()) {
+            fputcsv($output, [
+                $row['id'],
+                $row['username'],
+                $row['parking_name'],
+                $row['license_plate'],
+                $row['start_time'],
+                $row['end_time'],
+                $row['total_price'],
+                $row['status']
+            ], ';');
+        }
+        fclose($output);
+        exit;
+        
     default:
         echo json_encode(['error' => 'Invalid action']);
 }
