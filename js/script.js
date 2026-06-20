@@ -2,41 +2,65 @@ let occupancyChartInstance = null;
 let currentParkingPrice = 0;
 
 /* ============================================
-   DATA TABLES INIT
+   БЕЗПЕЧНІ ХЕЛПЕРИ ДЛЯ DOM
+   ============================================ */
+const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; };
+const setText = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+
+function showModalSafe(modalId) {
+    const el = document.getElementById(modalId);
+    if (!el) return;
+    let modal = bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el);
+    modal.show();
+}
+
+function hideModalSafe(modalId) {
+    const el = document.getElementById(modalId);
+    if (!el) return;
+    try {
+        const modal = bootstrap.Modal.getInstance(el);
+        if (modal) { modal.hide(); modal.dispose(); }
+    } catch(e) {}
+    
+    document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+    document.body.classList.remove('modal-open');
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+}
+
+function showToast(icon, title) {
+    if(typeof Swal !== 'undefined') {
+        Swal.fire({ icon: icon, title: title, toast: true, position: 'top-end', showConfirmButton: false, timer: 2500, timerProgressBar: true });
+    } else alert(title);
+}
+
+/* ============================================
+   ІНІЦІАЛІЗАЦІЯ БІБЛІОТЕК
    ============================================ */
 function initDataTables() {
     try {
-        const selectors = [
-            '#parkingsTable', '#vehiclesTable', '#bookingsTable',
-            '#userBookingsTable', '#userVehiclesTable'
-        ];
+        const selectors = ['#parkingsTable', '#vehiclesTable', '#bookingsTable', '#userBookingsTable', '#userVehiclesTable'];
         selectors.forEach(selector => {
             if ($.fn && $.fn.DataTable && $.fn.DataTable.isDataTable(selector)) {
                 $(selector).DataTable().destroy();
             }
             if ($(selector).length && $.fn && $.fn.DataTable) {
                 $(selector).DataTable({
-                    language: { url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/uk.json' },
-                    pageLength: 10,
-                    responsive: true,
-                    order: [],
-                    columnDefs: [{ orderable: false, targets: -1 }]
+                    language: { 
+                        url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/uk.json',
+                        emptyTable: "<div class='text-center py-4 text-muted'><i class='bi bi-inbox fs-1 d-block mb-2'></i>Немає записів</div>"
+                    },
+                    pageLength: 10, responsive: true, order: [], columnDefs: [{ orderable: false, targets: -1 }]
                 });
             }
         });
-    } catch(e) {
-        console.warn('DataTables init skipped or failed', e);
-    }
+    } catch(e) { console.warn('DataTables init failed', e); }
 }
 
-/* ============================================
-   CHART INIT
-   ============================================ */
 function initChart() {
     try {
         const ctx = document.getElementById('occupancyChart');
-        if (!ctx || !window.chartLabels || !window.chartData || typeof Chart === 'undefined') return;
-
+        if (!ctx || !window.chartLabels || typeof Chart === 'undefined') return;
         if (occupancyChartInstance) occupancyChartInstance.destroy();
 
         occupancyChartInstance = new Chart(ctx, {
@@ -44,152 +68,56 @@ function initChart() {
             data: {
                 labels: window.chartLabels,
                 datasets: [{
-                    label: 'Зайнято місць',
-                    data: window.chartData,
+                    label: 'Зайнято місць', data: window.chartData,
                     backgroundColor: window.chartColors || 'rgba(79, 70, 229, 0.6)',
-                    borderColor: window.chartColors ? window.chartColors.map(c => c.replace('0.7', '1')) : 'rgba(79, 70, 229, 1)',
-                    borderWidth: 1,
-                    borderRadius: 6,
-                    borderSkipped: false
+                    borderWidth: 1, borderRadius: 6
                 }]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: { stepSize: 1, font: { family: 'Inter', size: 12 }, color: '#94a3b8' },
-                        grid: { color: '#f1f5f9' }
-                    },
-                    x: {
-                        ticks: { font: { family: 'Inter', size: 11 }, color: '#64748b' },
-                        grid: { display: false }
-                    }
-                },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: '#1e293b',
-                        titleFont: { family: 'Inter', weight: '600' },
-                        bodyFont: { family: 'Inter' },
-                        cornerRadius: 8,
-                        padding: 12
-                    }
-                }
+                responsive: true, maintainAspectRatio: false,
+                scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } }, x: { grid: { display: false } } },
+                plugins: { legend: { display: false } }
             }
         });
-    } catch (e) {
-        console.warn('Chart init failed', e);
-    }
+    } catch (e) { console.warn('Chart init failed', e); }
 }
 
 /* ============================================
-   SIDEBAR TOGGLE (Mobile)
-   ============================================ */
-function initSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const toggle = document.getElementById('sidebarToggle');
-    const overlay = document.getElementById('sidebarOverlay');
-
-    if (!sidebar || !toggle || !overlay) return;
-
-    toggle.addEventListener('click', () => {
-        sidebar.classList.toggle('open');
-        overlay.classList.toggle('show');
-        document.body.style.overflow = sidebar.classList.contains('open') ? 'hidden' : '';
-    });
-
-    overlay.addEventListener('click', () => {
-        sidebar.classList.remove('open');
-        overlay.classList.remove('show');
-        document.body.style.overflow = '';
-    });
-
-    sidebar.addEventListener('click', function(e) {
-        const link = e.target.closest('.sidebar-link');
-        if (!link) return;
-        
-        e.preventDefault();
-        const tabId = link.getAttribute('data-tab');
-        if (!tabId) return;
-
-        sidebar.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
-        link.classList.add('active');
-
-        sidebar.classList.remove('open');
-        overlay.classList.remove('show');
-        document.body.style.overflow = '';
-
-        const tabTrigger = document.querySelector(`[data-bs-target="#${tabId}"]`);
-        if (tabTrigger) {
-            tabTrigger.click();
-        }
-    });
-}
-
-/* ============================================
-   AJAX FORM SUBMIT (із захистом від подвійних кліків)
+   ОБРОБКА ФОРМ (AJAX)
    ============================================ */
 function setupAjaxForm(buttonId, formId, action, modalId) {
     const btn = document.getElementById(buttonId);
     if (!btn) return;
-
-    // ВИПРАВЛЕНО: Блокуємо повторне навішування обробника після AJAX оновлення
     if (btn.dataset.listenerAttached === 'true') return;
     btn.dataset.listenerAttached = 'true';
 
     btn.addEventListener('click', function() {
         const form = document.getElementById(formId);
         if (!form) return;
-        
-        if (!form.checkValidity()) {
-            form.reportValidity();
-            return;
-        }
+        if (!form.checkValidity()) { form.reportValidity(); return; }
 
         const formData = new FormData(form);
         const originalText = btn.innerHTML;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Завантаження...';
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>...';
         btn.disabled = true;
 
-        fetch(`api.php?action=${action}`, {
-            method: 'POST',
-            body: formData
-        })
+        fetch(`api.php?action=${action}`, { method: 'POST', body: formData })
         .then(res => res.json())
         .then(data => {
             if (data.success) {
-                if (modalId) {
-                    const modalEl = document.getElementById(modalId);
-                    if (modalEl) {
-                        const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-                        modal.hide();
-                    }
-                    // Видаляємо затемнення, якщо Bootstrap завис
-                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
-                    document.body.classList.remove('modal-open');
-                    document.body.style.overflow = '';
-                    document.body.style.paddingRight = '';
-                }
+                if (modalId) hideModalSafe(modalId);
                 form.reset();
-                showToast('success', 'Дані успішно збережено!');
+                showToast('success', 'Збережено!');
                 updateUI();
             } else {
                 Swal.fire('Помилка', data.error || 'Невідома помилка', 'error');
             }
         })
-        .catch(() => Swal.fire('Помилка', 'Проблема зі з\'єднанням із сервером', 'error'))
-        .finally(() => {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-        });
+        .catch(() => Swal.fire('Помилка', 'Проблема зі з\'єднанням', 'error'))
+        .finally(() => { btn.innerHTML = originalText; btn.disabled = false; });
     });
 }
 
-/* ============================================
-   RE-INIT FORMS
-   ============================================ */
 function reinitForms() {
     setupAjaxForm('saveParkingBtn',  'addParkingForm',  'add_parking',  'addParkingModal');
     setupAjaxForm('updateParkingBtn','editParkingForm',  'update_parking','editParkingModal');
@@ -197,11 +125,10 @@ function reinitForms() {
     setupAjaxForm('updateVehicleBtn','editVehicleForm',  'update_vehicle','editVehicleModal');
     setupAjaxForm('saveBookingBtn',  'addBookingForm',   'add_booking',   'addBookingModal');
     setupAjaxForm('updateBookingBtn','editBookingForm',  'update_booking','editBookingModal');
-    // Логін та реєстрація оновлюються класичним POST, тому їх можна не перехоплювати AJAX
 }
 
 /* ============================================
-   UI UPDATE (AJAX refresh)
+   SPA ОНОВЛЕННЯ ІНТЕРФЕЙСУ
    ============================================ */
 async function updateUI() {
     try {
@@ -209,278 +136,233 @@ async function updateUI() {
         const html = await res.text();
         const doc = new DOMParser().parseFromString(html, 'text/html');
 
-        // Admin tabs
         const currentAdminTabs = document.getElementById('adminTabsContent');
         if (currentAdminTabs) {
             const newAdminTabs = doc.getElementById('adminTabsContent');
             const activePaneId = currentAdminTabs.querySelector('.tab-pane.active, .tab-pane.show.active')?.id || 'admin-dash';
 
-            ['#parkingsTable', '#vehiclesTable', '#bookingsTable'].forEach(sel => {
-                if ($.fn && $.fn.DataTable && $.fn.DataTable.isDataTable(sel)) $(sel).DataTable().destroy();
-            });
-
+            ['#parkingsTable', '#vehiclesTable', '#bookingsTable'].forEach(sel => { if ($.fn && $.fn.DataTable && $.fn.DataTable.isDataTable(sel)) $(sel).DataTable().destroy(); });
             currentAdminTabs.innerHTML = newAdminTabs.innerHTML;
             currentAdminTabs.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('show', 'active'));
-            const activeEl = document.getElementById(activePaneId);
-            if (activeEl) activeEl.classList.add('show', 'active');
-
-            const chartLabels = doc.querySelector('script')?.textContent;
-            if (chartLabels) {
-                const match = chartLabels.match(/window\.chartLabels\s*=\s*(\[.*?\]);/s);
-                const matchData = chartLabels.match(/window\.chartData\s*=\s*(\[.*?\]);/s);
-                const matchColors = chartLabels.match(/window\.chartColors\s*=\s*(\[.*?\]);/s);
-                if (match && window.chartLabels !== undefined) {
-                    try {
-                        window.chartLabels = JSON.parse(match[1]);
-                        window.chartData = JSON.parse(matchData[1]);
-                        window.chartColors = JSON.parse(matchColors[1]);
-                    } catch(e) {}
-                }
+            if (document.getElementById(activePaneId)) document.getElementById(activePaneId).classList.add('show', 'active');
+            
+            const chartScript = doc.querySelector('script')?.textContent;
+            if (chartScript && chartScript.includes('window.chartLabels')) {
+                try {
+                    window.chartLabels = JSON.parse(chartScript.match(/window\.chartLabels\s*=\s*(\[.*?\]);/s)[1]);
+                    window.chartData = JSON.parse(chartScript.match(/window\.chartData\s*=\s*(\[.*?\]);/s)[1]);
+                } catch(e) {}
             }
-
-            initChart();
-            initDataTables();
-            setupSidebarActive();
+            initChart(); initDataTables();
         }
 
-        // User tabs
         const userTabs = document.getElementById('userTabsContent');
         if (userTabs && !currentAdminTabs) {
             const newUserTabs = doc.getElementById('userTabsContent');
             const activeUserPane = userTabs.querySelector('.tab-pane.active, .tab-pane.show.active')?.id || 'user-parkings';
 
-            ['#userBookingsTable', '#userVehiclesTable'].forEach(sel => {
-                if ($.fn && $.fn.DataTable && $.fn.DataTable.isDataTable(sel)) $(sel).DataTable().destroy();
-            });
-
+            ['#userBookingsTable', '#userVehiclesTable'].forEach(sel => { if ($.fn && $.fn.DataTable && $.fn.DataTable.isDataTable(sel)) $(sel).DataTable().destroy(); });
             userTabs.innerHTML = newUserTabs.innerHTML;
             userTabs.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('show', 'active'));
-            const activeEl = document.getElementById(activeUserPane);
-            if (activeEl) activeEl.classList.add('show', 'active');
-
+            if (document.getElementById(activeUserPane)) document.getElementById(activeUserPane).classList.add('show', 'active');
             initDataTables();
-            setupSidebarActive();
         }
 
-        // Оновлюємо вміст модальних вікон (select-и свіжими авто/паркінгами)
+        // БЕЗПЕЧНА заміна модалок
         ['addBookingModal', 'editBookingModal', 'addVehicleModal', 'editVehicleModal', 'addParkingModal', 'editParkingModal'].forEach(id => {
             const currentModal = document.getElementById(id);
             const newModal = doc.getElementById(id);
             if (currentModal && newModal) {
-                const currentBody = currentModal.querySelector('.modal-body');
-                const newBody = newModal.querySelector('.modal-body');
-                if (currentBody && newBody) currentBody.innerHTML = newBody.innerHTML;
+                try { const m = bootstrap.Modal.getInstance(currentModal); if(m) m.dispose(); } catch(e) {}
+                currentModal.outerHTML = newModal.outerHTML; 
             }
         });
-        
+        reinitForms();
     } catch (e) {
-        console.error('Помилка AJAX оновлення', e);
-        location.reload(); // Якщо щось пішло не так, робимо звичайне перезавантаження
-    }
-}
-
-function setupSidebarActive() {
-    document.querySelectorAll('#userTabs .nav-link, #adminTabs .nav-link').forEach(tab => {
-        tab.addEventListener('shown.bs.tab', function(e) {
-            const targetId = e.target.getAttribute('data-bs-target');
-            if (!targetId) return;
-            const tabName = targetId.replace('#', '');
-            document.querySelectorAll('.sidebar-link').forEach(link => {
-                link.classList.toggle('active', link.getAttribute('data-tab') === tabName);
-            });
-        });
-    });
-}
-
-function showToast(icon, title) {
-    if(typeof Swal !== 'undefined') {
-        Swal.fire({
-            icon: icon, title: title, toast: true, position: 'top-end',
-            showConfirmButton: false, timer: 2500, timerProgressBar: true
-        });
-    } else {
-        alert(title);
+        console.error('Помилка AJAX, перезавантаження...', e);
+        location.reload();
     }
 }
 
 /* ============================================
-   EVENT DELEGATION
+   КЕРУВАННЯ ПОДІЯМИ ТА САЙДБАРОМ
    ============================================ */
 document.addEventListener('click', function(e) {
     
-    // ВІДПРАВКА ДАНИХ У МОДАЛКУ БРОНЮВАННЯ (З КНОПКИ ПАРКІНГУ)
+    // --- КЕРУВАННЯ ЛІВИМ САЙДБАРОМ (Sidebar) ---
+    const sidebarLink = e.target.closest('.sidebar-link');
+    if (sidebarLink) {
+        e.preventDefault();
+        const tabId = sidebarLink.getAttribute('data-tab');
+        if (!tabId) return;
+
+        // Виділяємо активний лінк
+        document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+        sidebarLink.classList.add('active');
+
+        // Закриваємо мобільне меню (якщо воно відкрите)
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebarOverlay');
+        if(sidebar) sidebar.classList.remove('open');
+        if(overlay) overlay.classList.remove('show');
+        document.body.style.overflow = '';
+
+        // Перемикаємо вкладку у головному вікні
+        const targetPane = document.getElementById(tabId);
+        if (targetPane) {
+            const container = targetPane.closest('.tab-content');
+            if (container) container.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('show', 'active'));
+            targetPane.classList.add('show', 'active');
+        }
+        return;
+    }
+
+    // Мобільна кнопка гамбургер
+    const toggleBtn = e.target.closest('#sidebarToggle');
+    if (toggleBtn) {
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebarOverlay');
+        if(sidebar) sidebar.classList.toggle('open');
+        if(overlay) overlay.classList.toggle('show');
+        document.body.style.overflow = sidebar?.classList.contains('open') ? 'hidden' : '';
+        return;
+    }
+
+    // Клік по темному фону на мобільному для закриття меню
+    if (e.target.id === 'sidebarOverlay') {
+        const sidebar = document.getElementById('sidebar');
+        if(sidebar) sidebar.classList.remove('open');
+        e.target.classList.remove('show');
+        document.body.style.overflow = '';
+        return;
+    }
+
+    // --- МОДАЛКИ ТА КНОПКИ ---
     const btnPrepare = e.target.closest('.btn-prepare-booking');
     if (btnPrepare) {
-        const pId = document.getElementById('bookingHiddenParkingId');
-        if(pId) pId.value = btnPrepare.dataset.id;
-        
-        const pName = document.getElementById('displayParkingName');
-        if(pName) pName.textContent = btnPrepare.dataset.name;
-        
+        setVal('bookingHiddenParkingId', btnPrepare.dataset.id);
+        setText('displayParkingName', btnPrepare.dataset.name);
         currentParkingPrice = parseFloat(btnPrepare.dataset.price) || 0;
-        const pPrice = document.getElementById('displayParkingPrice');
-        if(pPrice) pPrice.textContent = currentParkingPrice.toFixed(2);
-
-        const st = document.getElementById('bookingStartTime');
-        if(st) st.value = '';
-        const et = document.getElementById('bookingEndTime');
-        if(et) et.value = '';
-        const est = document.getElementById('estimatedPrice');
-        if(est) est.textContent = '0.00 ₴';
+        setText('displayParkingPrice', currentParkingPrice.toFixed(2));
+        setVal('bookingStartTime', ''); setVal('bookingEndTime', ''); setText('estimatedPrice', '0.00 ₴');
         return;
     }
 
-    // РЕДАГУВАННЯ ПАРКІНГУ
     const btnEditParking = e.target.closest('.btn-edit-parking');
     if (btnEditParking) {
-        fetch(`api.php?action=get_parking&id=${btnEditParking.dataset.id}`)
-            .then(res => res.json())
-            .then(data => {
-                const f = document.getElementById('editParkingForm');
-                if(!f) return;
-                f.querySelector('[name="id"]').value = data.id;
-                f.querySelector('[name="name"]').value = data.name;
-                f.querySelector('[name="address"]').value = data.address;
-                f.querySelector('[name="capacity"]').value = data.capacity;
-                f.querySelector('[name="available"]').value = data.available;
-                f.querySelector('[name="price_per_hour"]').value = data.price_per_hour;
-                new bootstrap.Modal(document.getElementById('editParkingModal')).show();
-            });
-        return;
+        fetch(`api.php?action=get_parking&id=${btnEditParking.dataset.id}`).then(res => res.json()).then(data => {
+            setVal('editParkingId', data.id); setVal('editParkingName', data.name); setVal('editParkingAddress', data.address);
+            setVal('editParkingCapacity', data.capacity); setVal('editParkingAvailable', data.available); setVal('editParkingPrice', data.price_per_hour);
+            showModalSafe('editParkingModal');
+        }); return;
     }
 
-    // РЕДАГУВАННЯ АВТО
     const btnEditVehicle = e.target.closest('.btn-edit-vehicle');
     if (btnEditVehicle) {
-        fetch(`api.php?action=get_vehicle&id=${btnEditVehicle.dataset.id}`)
-            .then(res => res.json())
-            .then(data => {
-                const f = document.getElementById('editVehicleForm');
-                if(!f) return;
-                f.querySelector('[name="id"]').value = data.id;
-                f.querySelector('[name="license_plate"]').value = data.license_plate;
-                f.querySelector('[name="brand"]').value = data.brand;
-                f.querySelector('[name="model"]').value = data.model;
-                f.querySelector('[name="color"]').value = data.color;
-                new bootstrap.Modal(document.getElementById('editVehicleModal')).show();
-            });
-        return;
+        fetch(`api.php?action=get_vehicle&id=${btnEditVehicle.dataset.id}`).then(res => res.json()).then(data => {
+            setVal('editVehicleId', data.id); setVal('editVehicleLicensePlate', data.license_plate);
+            setVal('editVehicleBrand', data.brand); setVal('editVehicleModel', data.model); setVal('editVehicleColor', data.color);
+            showModalSafe('editVehicleModal');
+        }); return;
     }
 
-    // РЕДАГУВАННЯ БРОНЮВАННЯ
     const btnEditBooking = e.target.closest('.btn-edit-booking');
     if (btnEditBooking) {
-        fetch(`api.php?action=get_booking&id=${btnEditBooking.dataset.id}`)
-            .then(res => res.json())
-            .then(data => {
-                const f = document.getElementById('editBookingForm');
-                if(!f) return;
-                f.querySelector('[name="id"]').value = data.id;
-                f.querySelector('[name="parking_id"]').value = data.parking_id;
-                f.querySelector('[name="vehicle_id"]').value = data.vehicle_id;
-                f.querySelector('[name="start_time"]').value = data.start_time.replace(' ', 'T');
-                f.querySelector('[name="end_time"]').value = data.end_time.replace(' ', 'T');
-                f.querySelector('[name="status"]').value = data.status;
-                new bootstrap.Modal(document.getElementById('editBookingModal')).show();
-            });
-        return;
+        fetch(`api.php?action=get_booking&id=${btnEditBooking.dataset.id}`).then(res => res.json()).then(data => {
+            setVal('editBookingId', data.id); setVal('editBookingParkingId', data.parking_id);
+            setVal('editBookingVehicleId', data.vehicle_id); setVal('editBookingVehiclePlate', data.license_plate || 'Авто');
+            setVal('editBookingStartTime', data.start_time.replace(' ', 'T')); setVal('editBookingEndTime', data.end_time.replace(' ', 'T'));
+            setVal('editBookingStatus', data.status);
+            showModalSafe('editBookingModal');
+        }); return;
     }
 
-    // ВИДАЛЕННЯ
-    const btnDeleteP = e.target.closest('.btn-delete-parking');
-    const btnDeleteV = e.target.closest('.btn-delete-vehicle');
-    const btnDeleteB = e.target.closest('.btn-delete-booking');
+    const btnDelete = e.target.closest('.btn-delete-parking, .btn-delete-vehicle, .btn-delete-booking');
+    if (btnDelete) {
+        let action = null, id = btnDelete.dataset.id, text = '';
+        if (btnDelete.classList.contains('btn-delete-parking')) { action = 'delete_parking'; text = 'цей паркінг'; }
+        else if (btnDelete.classList.contains('btn-delete-vehicle')) { action = 'delete_vehicle'; text = 'цей транспорт'; }
+        else if (btnDelete.classList.contains('btn-delete-booking')) { action = 'delete_booking'; text = 'це бронювання'; }
 
-    let action = null, id = null, text = '';
-    if (btnDeleteP) { action = 'delete_parking'; id = btnDeleteP.dataset.id; text = 'цей паркінг'; }
-    else if (btnDeleteV) { action = 'delete_vehicle'; id = btnDeleteV.dataset.id; text = 'цей транспорт'; }
-    else if (btnDeleteB) { action = 'delete_booking'; id = btnDeleteB.dataset.id; text = 'це бронювання'; }
-
-    if (action) {
         Swal.fire({
-            title: 'Ви впевнені?',
-            text: `Ви дійсно хочете видалити ${text}?`,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#dc3545',
-            cancelButtonColor: '#6c757d',
-            confirmButtonText: 'Так, видалити',
-            cancelButtonText: 'Скасувати'
+            title: 'Ви впевнені?', text: `Ви дійсно хочете видалити ${text}?`, icon: 'warning',
+            showCancelButton: true, confirmButtonColor: '#dc3545', cancelButtonColor: '#6c757d', confirmButtonText: 'Так, видалити'
         }).then(result => {
             if (result.isConfirmed) {
-                fetch(`api.php?action=${action}&id=${id}`)
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.success) {
-                            showToast('success', 'Успішно видалено!');
-                            updateUI();
-                        } else {
-                            Swal.fire('Помилка', data.error, 'error');
-                        }
-                    });
+                fetch(`api.php?action=${action}&id=${id}`).then(res => res.json()).then(data => {
+                    if (data.success) { showToast('success', 'Видалено!'); updateUI(); } else Swal.fire('Помилка', data.error, 'error');
+                });
             }
-        });
-        return;
+        }); return;
     }
 
-    // ЗМІНА СТАТУСУ (Підтвердити/Відхилити)
-    const btnConfirm = e.target.closest('.btn-confirm-booking');
-    const btnReject = e.target.closest('.btn-reject-booking');
-    if (btnConfirm || btnReject) {
-        const id = (btnConfirm || btnReject).dataset.id;
-        const status = btnConfirm ? 'active' : 'cancelled';
-        const fd = new FormData();
-        fd.append('id', id);
-        fd.append('status', status);
-
-        fetch('api.php?action=change_booking_status', { method: 'POST', body: fd })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    showToast('success', 'Статус оновлено!');
-                    updateUI();
-                }
-            });
-        return;
+    const btnStatus = e.target.closest('.btn-confirm-booking, .btn-reject-booking');
+    if (btnStatus) {
+        const id = btnStatus.dataset.id;
+        const status = btnStatus.classList.contains('btn-confirm-booking') ? 'active' : 'cancelled';
+        const fd = new FormData(); fd.append('id', id); fd.append('status', status);
+        fetch('api.php?action=change_booking_status', { method: 'POST', body: fd }).then(res => res.json()).then(data => {
+            if (data.success) { showToast('success', 'Статус оновлено!'); updateUI(); }
+        }); return;
     }
 });
 
 /* ============================================
-   PRICE CALCULATOR
+   РОЗРАХУНОК ЦІНИ ТА ОКРУГЛЕННЯ ЧАСУ
    ============================================ */
-document.addEventListener('input', function(e) {
-    if (!e.target.matches('#bookingStartTime, #bookingEndTime')) return;
+document.addEventListener('change', function(e) {
+    if (!e.target.matches('#bookingStartTime, #bookingEndTime, #editBookingStartTime, #editBookingEndTime')) return;
 
-    const startInput = document.getElementById('bookingStartTime');
-    const endInput = document.getElementById('bookingEndTime');
-    const priceDisplay = document.getElementById('estimatedPrice');
-    if (!startInput || !endInput || !priceDisplay) return;
+    let val = e.target.value;
+    if (val) {
+        let d = new Date(val);
+        let m = d.getMinutes();
+        if (m !== 0 && m !== 30) {
+            if (m < 15) m = 0; else if (m < 45) m = 30; else { m = 0; d.setHours(d.getHours() + 1); }
+            d.setMinutes(m); d.setSeconds(0); d.setMilliseconds(0);
+            d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+            e.target.value = d.toISOString().slice(0, 16);
+            showToast('info', 'Час округлено до 30 хвилин');
+        }
+    }
+
+    const startInput = e.target.id.includes('edit') ? document.getElementById('editBookingStartTime') : document.getElementById('bookingStartTime');
+    const endInput = e.target.id.includes('edit') ? document.getElementById('editBookingEndTime') : document.getElementById('bookingEndTime');
+    const priceDisplay = e.target.id.includes('edit') ? null : document.getElementById('estimatedPrice');
+    
+    if (!startInput || !endInput) return;
 
     const now = new Date();
+    let nm = now.getMinutes();
+    if (nm > 0 && nm <= 30) now.setMinutes(30); else if (nm > 30) { now.setHours(now.getHours() + 1); now.setMinutes(0); }
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-    const minDateTime = now.toISOString().slice(0, 16);
+    
+    if (!startInput.min) startInput.min = now.toISOString().slice(0, 16);
 
-    if (!startInput.min) startInput.min = minDateTime;
-    if (e.target.id === 'bookingStartTime') endInput.min = startInput.value;
+    if (e.target.id === 'bookingStartTime' || e.target.id === 'editBookingStartTime') {
+        if (startInput.value) {
+            let minEnd = new Date(startInput.value);
+            minEnd.setMinutes(minEnd.getMinutes() + 30);
+            minEnd.setMinutes(minEnd.getMinutes() - minEnd.getTimezoneOffset());
+            endInput.min = minEnd.toISOString().slice(0, 16);
+            
+            if (endInput.value && new Date(endInput.value) < new Date(endInput.min)) {
+                endInput.value = endInput.min;
+                showToast('warning', 'Мінімальний час - 30 хвилин');
+            }
+        }
+    }
 
-    const start = new Date(startInput.value);
-    const end = new Date(endInput.value);
-
-    if (start && end && !isNaN(start) && !isNaN(end) && end > start) {
-        const diffHours = Math.ceil((end - start) / (1000 * 60 * 60));
-        priceDisplay.textContent = (diffHours * currentParkingPrice).toFixed(2) + ' ₴';
-    } else {
-        priceDisplay.textContent = '0.00 ₴';
+    if (priceDisplay && startInput.value && endInput.value) {
+        const start = new Date(startInput.value);
+        const end = new Date(endInput.value);
+        if (end > start) {
+            const diffHours = (end - start) / (1000 * 60 * 60);
+            priceDisplay.textContent = (diffHours * currentParkingPrice).toFixed(2) + ' ₴';
+        } else priceDisplay.textContent = '0.00 ₴';
     }
 });
 
-/* ============================================
-   INIT
-   ============================================ */
 document.addEventListener('DOMContentLoaded', function() {
-    initSidebar();
-    setupSidebarActive();
-    reinitForms();
-    initChart();
-    initDataTables();
+    reinitForms(); initChart(); initDataTables();
 });
