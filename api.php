@@ -55,8 +55,11 @@ switch ($action) {
         $name = $_POST['name']; $address = $_POST['address']; $capacity = $_POST['capacity'];
         $available = $_POST['available']; $price_per_hour = $_POST['price_per_hour'] ?? 0;
         
-        $uploader = new Uploader();
-        try { $image = $uploader->uploadImage('image'); } catch (Exception $e) { echo json_encode(['error' => $e->getMessage()]); exit; }
+        $image = null;
+        if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+            $uploader = new Uploader();
+            try { $image = $uploader->uploadImage('image'); } catch (Exception $e) { echo json_encode(['error' => $e->getMessage()]); exit; }
+        }
 
         $stmt = $conn->prepare("INSERT INTO parking_places (name, address, capacity, available, price_per_hour, image) VALUES (?, ?, ?, ?, ?, ?)");
         $stmt->bind_param("ssiids", $name, $address, $capacity, $available, $price_per_hour, $image);
@@ -68,16 +71,33 @@ switch ($action) {
         $id = $_POST['id']; $name = $_POST['name']; $address = $_POST['address'];
         $capacity = $_POST['capacity']; $available = $_POST['available']; $price_per_hour = $_POST['price_per_hour'] ?? 0;
 
-        $stmt = $conn->prepare("UPDATE parking_places SET name = ?, address = ?, capacity = ?, available = ?, price_per_hour = ? WHERE id = ?");
-        $stmt->bind_param("ssiidi", $name, $address, $capacity, $available, $price_per_hour, $id);
+        if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+            $uploader = new Uploader();
+            try { 
+                $image = $uploader->uploadImage('image'); 
+                $stmt = $conn->prepare("UPDATE parking_places SET name = ?, address = ?, capacity = ?, available = ?, price_per_hour = ?, image = ? WHERE id = ?");
+                $stmt->bind_param("ssiidsi", $name, $address, $capacity, $available, $price_per_hour, $image, $id);
+            } catch (Exception $e) { 
+                echo json_encode(['error' => $e->getMessage()]); exit; 
+            }
+        } else {
+            $stmt = $conn->prepare("UPDATE parking_places SET name = ?, address = ?, capacity = ?, available = ?, price_per_hour = ? WHERE id = ?");
+            $stmt->bind_param("ssiidi", $name, $address, $capacity, $available, $price_per_hour, $id);
+        }
+
         if ($stmt->execute()) echo json_encode(['success' => true]); else echo json_encode(['error' => $conn->error]);
         break;
 
     case 'delete_parking':
         if (!$is_admin) { http_response_code(403); echo json_encode(['error' => 'Доступ заборонено']); exit; }
-        $stmt = $conn->prepare("DELETE FROM parking_places WHERE id = ?");
-        $stmt->bind_param("i", $_GET['id']);
-        if ($stmt->execute()) echo json_encode(['success' => true]); else echo json_encode(['error' => $conn->error]);
+        try {
+            $stmt = $conn->prepare("DELETE FROM parking_places WHERE id = ?");
+            $stmt->bind_param("i", $_GET['id']);
+            $stmt->execute();
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['error' => 'Неможливо видалити паркінг. До нього прив\'язані автомобілі або існують бронювання.']);
+        }
         break;
 
     case 'add_vehicle':
@@ -85,8 +105,11 @@ switch ($action) {
         $license_plate = $_POST['license_plate']; $brand = $_POST['brand']; $model = $_POST['model']; $color = $_POST['color'];
         $parking_id = !empty($_POST['parking_id']) ? $_POST['parking_id'] : null;
 
-        $uploader = new Uploader();
-        try { $image = $uploader->uploadImage('image'); } catch (Exception $e) { echo json_encode(['error' => $e->getMessage()]); exit; }
+        $image = null;
+        if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+            $uploader = new Uploader();
+            try { $image = $uploader->uploadImage('image'); } catch (Exception $e) { echo json_encode(['error' => $e->getMessage()]); exit; }
+        }
 
         $stmt = $conn->prepare("INSERT INTO vehicles (license_plate, brand, model, color, parking_id, image, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
         $stmt->bind_param("ssssisi", $license_plate, $brand, $model, $color, $parking_id, $image, $user_id);
@@ -97,15 +120,32 @@ switch ($action) {
         $id = $_POST['id']; $license_plate = $_POST['license_plate']; $brand = $_POST['brand']; $model = $_POST['model']; $color = $_POST['color'];
         $parking_id = !empty($_POST['parking_id']) ? $_POST['parking_id'] : null;
 
-        $stmt = $conn->prepare("UPDATE vehicles SET license_plate = ?, brand = ?, model = ?, color = ?, parking_id = ? WHERE id = ?");
-        $stmt->bind_param("ssssii", $license_plate, $brand, $model, $color, $parking_id, $id);
+        if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+            $uploader = new Uploader();
+            try { 
+                $image = $uploader->uploadImage('image'); 
+                $stmt = $conn->prepare("UPDATE vehicles SET license_plate = ?, brand = ?, model = ?, color = ?, parking_id = ?, image = ? WHERE id = ?");
+                $stmt->bind_param("ssssisi", $license_plate, $brand, $model, $color, $parking_id, $image, $id);
+            } catch (Exception $e) { 
+                echo json_encode(['error' => $e->getMessage()]); exit; 
+            }
+        } else {
+            $stmt = $conn->prepare("UPDATE vehicles SET license_plate = ?, brand = ?, model = ?, color = ?, parking_id = ? WHERE id = ?");
+            $stmt->bind_param("ssssii", $license_plate, $brand, $model, $color, $parking_id, $id);
+        }
+
         if ($stmt->execute()) echo json_encode(['success' => true]); else echo json_encode(['error' => $conn->error]);
         break;
 
     case 'delete_vehicle':
-        $stmt = $conn->prepare("DELETE FROM vehicles WHERE id = ?");
-        $stmt->bind_param("i", $_GET['id']);
-        if ($stmt->execute()) echo json_encode(['success' => true]); else echo json_encode(['error' => $conn->error]);
+        try {
+            $stmt = $conn->prepare("DELETE FROM vehicles WHERE id = ?");
+            $stmt->bind_param("i", $_GET['id']);
+            $stmt->execute();
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['error' => 'Неможливо видалити транспорт. Для нього існують створені бронювання в системі.']);
+        }
         break;
 
     case 'add_booking':
@@ -213,30 +253,45 @@ switch ($action) {
         break;
 
     case 'delete_booking':
-        $id = $_GET['id'];
-        $get_stmt = $conn->prepare("SELECT parking_id FROM bookings WHERE id = ?");
-        $get_stmt->bind_param("i", $id); $get_stmt->execute();
-        $pid = $get_stmt->get_result()->fetch_assoc()['parking_id'];
+        try {
+            $id = $_GET['id'];
+            $get_stmt = $conn->prepare("SELECT parking_id FROM bookings WHERE id = ?");
+            $get_stmt->bind_param("i", $id); 
+            $get_stmt->execute();
+            $res = $get_stmt->get_result()->fetch_assoc();
+            $pid = $res ? $res['parking_id'] : null;
 
-        $stmt = $conn->prepare("DELETE FROM bookings WHERE id = ?");
-        $stmt->bind_param("i", $id); $stmt->execute();
-        sync_parking_availability($conn, $pid);
-        echo json_encode(['success' => true]);
+            $stmt = $conn->prepare("DELETE FROM bookings WHERE id = ?");
+            $stmt->bind_param("i", $id); 
+            $stmt->execute();
+            
+            if ($pid) sync_parking_availability($conn, $pid);
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['error' => 'Помилка видалення бронювання.']);
+        }
         break;
 
     case 'change_booking_status':
         if (!$is_admin) { http_response_code(403); echo json_encode(['error' => 'Доступ заборонено']); exit; }
-        $id = $_POST['id']; $status = $_POST['status'];
+        try {
+            $id = $_POST['id']; $status = $_POST['status'];
 
-        $get_stmt = $conn->prepare("SELECT parking_id FROM bookings WHERE id = ?");
-        $get_stmt->bind_param("i", $id); $get_stmt->execute();
-        $pid = $get_stmt->get_result()->fetch_assoc()['parking_id'];
+            $get_stmt = $conn->prepare("SELECT parking_id FROM bookings WHERE id = ?");
+            $get_stmt->bind_param("i", $id); 
+            $get_stmt->execute();
+            $res = $get_stmt->get_result()->fetch_assoc();
+            $pid = $res ? $res['parking_id'] : null;
 
-        $stmt = $conn->prepare("UPDATE bookings SET status = ? WHERE id = ?");
-        $stmt->bind_param("si", $status, $id); $stmt->execute();
-        
-        sync_parking_availability($conn, $pid);
-        echo json_encode(['success' => true]);
+            $stmt = $conn->prepare("UPDATE bookings SET status = ? WHERE id = ?");
+            $stmt->bind_param("si", $status, $id); 
+            $stmt->execute();
+            
+            if ($pid) sync_parking_availability($conn, $pid);
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['error' => 'Помилка оновлення статусу.']);
+        }
         break;
 
     case 'get_parking':

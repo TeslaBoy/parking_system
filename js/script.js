@@ -102,7 +102,14 @@ function setupAjaxForm(buttonId, formId, action, modalId) {
         btn.disabled = true;
 
         fetch(`api.php?action=${action}`, { method: 'POST', body: formData })
-        .then(res => res.json())
+        .then(async res => {
+            const textData = await res.text();
+            try { return JSON.parse(textData); } 
+            catch (err) {
+                console.error("ОТРИМАНО ПОМИЛКУ ВІД СЕРВЕРА (замість JSON):", textData);
+                throw new Error("Внутрішня помилка сервера. Перевірте консоль для деталей.");
+            }
+        })
         .then(data => {
             if (data.success) {
                 if (modalId) hideModalSafe(modalId);
@@ -113,7 +120,7 @@ function setupAjaxForm(buttonId, formId, action, modalId) {
                 Swal.fire('Помилка', data.error || 'Невідома помилка', 'error');
             }
         })
-        .catch(() => Swal.fire('Помилка', 'Проблема зі з\'єднанням', 'error'))
+        .catch(e => Swal.fire('Помилка', e.message, 'error'))
         .finally(() => { btn.innerHTML = originalText; btn.disabled = false; });
     });
 }
@@ -151,6 +158,7 @@ async function updateUI() {
                 try {
                     window.chartLabels = JSON.parse(chartScript.match(/window\.chartLabels\s*=\s*(\[.*?\]);/s)[1]);
                     window.chartData = JSON.parse(chartScript.match(/window\.chartData\s*=\s*(\[.*?\]);/s)[1]);
+                    window.chartColors = JSON.parse(chartScript.match(/window\.chartColors\s*=\s*(\[.*?\]);/s)[1]);
                 } catch(e) {}
             }
             initChart(); initDataTables();
@@ -187,130 +195,17 @@ async function updateUI() {
 /* ============================================
    КЕРУВАННЯ ПОДІЯМИ ТА САЙДБАРОМ
    ============================================ */
-document.addEventListener('click', function(e) {
-    
-    // --- КЕРУВАННЯ ЛІВИМ САЙДБАРОМ (Sidebar) ---
-    const sidebarLink = e.target.closest('.sidebar-link');
-    if (sidebarLink) {
-        e.preventDefault();
-        const tabId = sidebarLink.getAttribute('data-tab');
-        if (!tabId) return;
-
-        // Виділяємо активний лінк
-        document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
-        sidebarLink.classList.add('active');
-
-        // Закриваємо мобільне меню (якщо воно відкрите)
-        const sidebar = document.getElementById('sidebar');
-        const overlay = document.getElementById('sidebarOverlay');
-        if(sidebar) sidebar.classList.remove('open');
-        if(overlay) overlay.classList.remove('show');
-        document.body.style.overflow = '';
-
-        // Перемикаємо вкладку у головному вікні
-        const targetPane = document.getElementById(tabId);
-        if (targetPane) {
-            const container = targetPane.closest('.tab-content');
-            if (container) container.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('show', 'active'));
-            targetPane.classList.add('show', 'active');
-        }
-        return;
-    }
-
-    // Мобільна кнопка гамбургер
-    const toggleBtn = e.target.closest('#sidebarToggle');
-    if (toggleBtn) {
-        const sidebar = document.getElementById('sidebar');
-        const overlay = document.getElementById('sidebarOverlay');
-        if(sidebar) sidebar.classList.toggle('open');
-        if(overlay) overlay.classList.toggle('show');
-        document.body.style.overflow = sidebar?.classList.contains('open') ? 'hidden' : '';
-        return;
-    }
-
-    // Клік по темному фону на мобільному для закриття меню
-    if (e.target.id === 'sidebarOverlay') {
-        const sidebar = document.getElementById('sidebar');
-        if(sidebar) sidebar.classList.remove('open');
-        e.target.classList.remove('show');
-        document.body.style.overflow = '';
-        return;
-    }
-
-    // --- МОДАЛКИ ТА КНОПКИ ---
-    const btnPrepare = e.target.closest('.btn-prepare-booking');
-    if (btnPrepare) {
-        setVal('bookingHiddenParkingId', btnPrepare.dataset.id);
-        setText('displayParkingName', btnPrepare.dataset.name);
-        currentParkingPrice = parseFloat(btnPrepare.dataset.price) || 0;
-        setText('displayParkingPrice', currentParkingPrice.toFixed(2));
-        setVal('bookingStartTime', ''); setVal('bookingEndTime', ''); setText('estimatedPrice', '0.00 ₴');
-        return;
-    }
-
-    const btnEditParking = e.target.closest('.btn-edit-parking');
-    if (btnEditParking) {
-        fetch(`api.php?action=get_parking&id=${btnEditParking.dataset.id}`).then(res => res.json()).then(data => {
-            setVal('editParkingId', data.id); setVal('editParkingName', data.name); setVal('editParkingAddress', data.address);
-            setVal('editParkingCapacity', data.capacity); setVal('editParkingAvailable', data.available); setVal('editParkingPrice', data.price_per_hour);
-            showModalSafe('editParkingModal');
-        }); return;
-    }
-
-    const btnEditVehicle = e.target.closest('.btn-edit-vehicle');
-    if (btnEditVehicle) {
-        fetch(`api.php?action=get_vehicle&id=${btnEditVehicle.dataset.id}`).then(res => res.json()).then(data => {
-            setVal('editVehicleId', data.id); setVal('editVehicleLicensePlate', data.license_plate);
-            setVal('editVehicleBrand', data.brand); setVal('editVehicleModel', data.model); setVal('editVehicleColor', data.color);
-            showModalSafe('editVehicleModal');
-        }); return;
-    }
-
-    const btnEditBooking = e.target.closest('.btn-edit-booking');
-    if (btnEditBooking) {
-        fetch(`api.php?action=get_booking&id=${btnEditBooking.dataset.id}`).then(res => res.json()).then(data => {
-            setVal('editBookingId', data.id); setVal('editBookingParkingId', data.parking_id);
-            setVal('editBookingVehicleId', data.vehicle_id); setVal('editBookingVehiclePlate', data.license_plate || 'Авто');
-            setVal('editBookingStartTime', data.start_time.replace(' ', 'T')); setVal('editBookingEndTime', data.end_time.replace(' ', 'T'));
-            setVal('editBookingStatus', data.status);
-            showModalSafe('editBookingModal');
-        }); return;
-    }
-
-    const btnDelete = e.target.closest('.btn-delete-parking, .btn-delete-vehicle, .btn-delete-booking');
-    if (btnDelete) {
-        let action = null, id = btnDelete.dataset.id, text = '';
-        if (btnDelete.classList.contains('btn-delete-parking')) { action = 'delete_parking'; text = 'цей паркінг'; }
-        else if (btnDelete.classList.contains('btn-delete-vehicle')) { action = 'delete_vehicle'; text = 'цей транспорт'; }
-        else if (btnDelete.classList.contains('btn-delete-booking')) { action = 'delete_booking'; text = 'це бронювання'; }
-
-        Swal.fire({
-            title: 'Ви впевнені?', text: `Ви дійсно хочете видалити ${text}?`, icon: 'warning',
-            showCancelButton: true, confirmButtonColor: '#dc3545', cancelButtonColor: '#6c757d', confirmButtonText: 'Так, видалити'
-        }).then(result => {
-            if (result.isConfirmed) {
-                fetch(`api.php?action=${action}&id=${id}`).then(res => res.json()).then(data => {
-                    if (data.success) { showToast('success', 'Видалено!'); updateUI(); } else Swal.fire('Помилка', data.error, 'error');
-                });
-            }
-        }); return;
-    }
-
-    const btnStatus = e.target.closest('.btn-confirm-booking, .btn-reject-booking');
-    if (btnStatus) {
-        const id = btnStatus.dataset.id;
-        const status = btnStatus.classList.contains('btn-confirm-booking') ? 'active' : 'cancelled';
-        const fd = new FormData(); fd.append('id', id); fd.append('status', status);
-        fetch('api.php?action=change_booking_status', { method: 'POST', body: fd }).then(res => res.json()).then(data => {
-            if (data.success) { showToast('success', 'Статус оновлено!'); updateUI(); }
-        }); return;
-    }
-});
-
-/* ============================================
-   РОЗРАХУНОК ЦІНИ ТА ОКРУГЛЕННЯ ЧАСУ
-   ============================================ */
 document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('time-filter-input')) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('time', e.target.value);
+        window.history.pushState({}, '', url);
+        
+        e.target.style.opacity = '0.5';
+        updateUI().then(() => { showToast('info', 'Статистику завантаженості оновлено!'); });
+        return;
+    }
+
     if (!e.target.matches('#bookingStartTime, #bookingEndTime, #editBookingStartTime, #editBookingEndTime')) return;
 
     let val = e.target.value;
@@ -360,6 +255,142 @@ document.addEventListener('change', function(e) {
             const diffHours = (end - start) / (1000 * 60 * 60);
             priceDisplay.textContent = (diffHours * currentParkingPrice).toFixed(2) + ' ₴';
         } else priceDisplay.textContent = '0.00 ₴';
+    }
+});
+
+document.addEventListener('click', function(e) {
+    const sidebarLink = e.target.closest('.sidebar-link');
+    if (sidebarLink) {
+        e.preventDefault();
+        const tabId = sidebarLink.getAttribute('data-tab');
+        if (!tabId) return;
+
+        document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+        sidebarLink.classList.add('active');
+
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebarOverlay');
+        if(sidebar) sidebar.classList.remove('open');
+        if(overlay) overlay.classList.remove('show');
+        document.body.style.overflow = '';
+
+        const targetPane = document.getElementById(tabId);
+        if (targetPane) {
+            const container = targetPane.closest('.tab-content');
+            if (container) container.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('show', 'active'));
+            targetPane.classList.add('show', 'active');
+        }
+        return;
+    }
+
+    const toggleBtn = e.target.closest('#sidebarToggle');
+    if (toggleBtn) {
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebarOverlay');
+        if(sidebar) sidebar.classList.toggle('open');
+        if(overlay) overlay.classList.toggle('show');
+        document.body.style.overflow = sidebar?.classList.contains('open') ? 'hidden' : '';
+        return;
+    }
+
+    if (e.target.id === 'sidebarOverlay') {
+        const sidebar = document.getElementById('sidebar');
+        if(sidebar) sidebar.classList.remove('open');
+        e.target.classList.remove('show');
+        document.body.style.overflow = '';
+        return;
+    }
+
+    const btnPrepare = e.target.closest('.btn-prepare-booking');
+    if (btnPrepare) {
+        setVal('bookingHiddenParkingId', btnPrepare.dataset.id);
+        setText('displayParkingName', btnPrepare.dataset.name);
+        currentParkingPrice = parseFloat(btnPrepare.dataset.price) || 0;
+        setText('displayParkingPrice', currentParkingPrice.toFixed(2));
+        setVal('bookingStartTime', ''); setVal('bookingEndTime', ''); setText('estimatedPrice', '0.00 ₴');
+        return;
+    }
+
+    const btnEditParking = e.target.closest('.btn-edit-parking');
+    if (btnEditParking) {
+        fetch(`api.php?action=get_parking&id=${btnEditParking.dataset.id}`).then(res => res.json()).then(data => {
+            setVal('editParkingId', data.id); setVal('editParkingName', data.name); setVal('editParkingAddress', data.address);
+            setVal('editParkingCapacity', data.capacity); setVal('editParkingAvailable', data.available); setVal('editParkingPrice', data.price_per_hour);
+            showModalSafe('editParkingModal');
+        }); return;
+    }
+
+    const btnEditVehicle = e.target.closest('.btn-edit-vehicle');
+    if (btnEditVehicle) {
+        fetch(`api.php?action=get_vehicle&id=${btnEditVehicle.dataset.id}`).then(res => res.json()).then(data => {
+            setVal('editVehicleId', data.id); setVal('editVehicleLicensePlate', data.license_plate);
+            setVal('editVehicleBrand', data.brand); setVal('editVehicleModel', data.model); setVal('editVehicleColor', data.color);
+            showModalSafe('editVehicleModal');
+        }); return;
+    }
+
+    const btnEditBooking = e.target.closest('.btn-edit-booking');
+    if (btnEditBooking) {
+        fetch(`api.php?action=get_booking&id=${btnEditBooking.dataset.id}`).then(res => res.json()).then(data => {
+            setVal('editBookingId', data.id); setVal('editBookingParkingId', data.parking_id);
+            setVal('editBookingVehicleId', data.vehicle_id); setVal('editBookingVehiclePlate', data.license_plate || 'Авто');
+            setVal('editBookingStartTime', data.start_time.replace(' ', 'T')); setVal('editBookingEndTime', data.end_time.replace(' ', 'T'));
+            setVal('editBookingStatus', data.status);
+            showModalSafe('editBookingModal');
+        }); return;
+    }
+
+    // ВИДАЛЕННЯ З БЕЗПЕЧНИМ ПАРСИНГОМ ПОМИЛОК
+    const btnDelete = e.target.closest('.btn-delete-parking, .btn-delete-vehicle, .btn-delete-booking');
+    if (btnDelete) {
+        let action = null, id = btnDelete.dataset.id, text = '';
+        if (btnDelete.classList.contains('btn-delete-parking')) { action = 'delete_parking'; text = 'цей паркінг'; }
+        else if (btnDelete.classList.contains('btn-delete-vehicle')) { action = 'delete_vehicle'; text = 'цей транспорт'; }
+        else if (btnDelete.classList.contains('btn-delete-booking')) { action = 'delete_booking'; text = 'це бронювання'; }
+
+        Swal.fire({
+            title: 'Ви впевнені?', text: `Ви дійсно хочете видалити ${text}?`, icon: 'warning',
+            showCancelButton: true, confirmButtonColor: '#dc3545', cancelButtonColor: '#6c757d', confirmButtonText: 'Так, видалити', cancelButtonText: 'Скасувати'
+        }).then(result => {
+            if (result.isConfirmed) {
+                fetch(`api.php?action=${action}&id=${id}`)
+                .then(async res => {
+                    const textData = await res.text();
+                    try {
+                        return JSON.parse(textData);
+                    } catch (err) {
+                        console.error("ОТРИМАНО ПОМИЛКУ ВІД СЕРВЕРА (замість JSON):", textData);
+                        throw new Error("Внутрішня помилка сервера. Можливо, об'єкт містить пов'язані дані.");
+                    }
+                })
+                .then(data => {
+                    if (data.success) { showToast('success', 'Успішно видалено!'); updateUI(); } 
+                    else Swal.fire('Помилка', data.error, 'error');
+                })
+                .catch(e => Swal.fire('Помилка', e.message, 'error'));
+            }
+        }); return;
+    }
+
+    // ЗМІНА СТАТУСУ З БЕЗПЕЧНИМ ПАРСИНГОМ ПОМИЛОК
+    const btnStatus = e.target.closest('.btn-confirm-booking, .btn-reject-booking');
+    if (btnStatus) {
+        const id = btnStatus.dataset.id;
+        const status = btnStatus.classList.contains('btn-confirm-booking') ? 'active' : 'cancelled';
+        const fd = new FormData(); fd.append('id', id); fd.append('status', status);
+        
+        fetch('api.php?action=change_booking_status', { method: 'POST', body: fd })
+        .then(async res => {
+            const textData = await res.text();
+            try { return JSON.parse(textData); } 
+            catch (err) { throw new Error("Внутрішня помилка сервера при зміні статусу."); }
+        })
+        .then(data => {
+            if (data.success) { showToast('success', 'Статус оновлено!'); updateUI(); }
+            else Swal.fire('Помилка', data.error, 'error');
+        })
+        .catch(e => Swal.fire('Помилка', e.message, 'error'));
+        return;
     }
 });
 

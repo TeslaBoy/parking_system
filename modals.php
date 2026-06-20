@@ -70,7 +70,7 @@
         <div class="modal-content border-0 shadow-lg rounded-4">
             <div class="modal-header bg-primary text-white border-0 rounded-top-4 p-4"><h5 class="modal-title fw-bold"><i class="bi bi-car-front-fill"></i> Додати транспорт</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
             <div class="modal-body p-4 bg-light">
-                <form id="addVehicleForm">
+                <form id="addVehicleForm" enctype="multipart/form-data">
                     <div class="form-floating mb-3 shadow-sm"><input type="text" class="form-control text-uppercase fw-bold" name="license_plate" placeholder="AE 1234 BT" required><label>Номерний знак</label></div>
                     <div class="row g-2 mb-3">
                         <div class="col-6"><div class="form-floating shadow-sm"><input type="text" class="form-control" name="brand" placeholder="BMW" required><label>Марка</label></div></div>
@@ -90,7 +90,7 @@
         <div class="modal-content border-0 shadow-lg rounded-4">
             <div class="modal-header bg-warning border-0 rounded-top-4 p-4"><h5 class="modal-title fw-bold"><i class="bi bi-pencil-square"></i> Редагувати транспорт</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body p-4 bg-light">
-                <form id="editVehicleForm">
+                <form id="editVehicleForm" enctype="multipart/form-data">
                     <input type="hidden" name="id" id="editVehicleId">
                     <div class="form-floating mb-3 shadow-sm"><input type="text" class="form-control text-uppercase fw-bold" name="license_plate" id="editVehicleLicensePlate" required><label>Номерний знак</label></div>
                     <div class="row g-2 mb-3">
@@ -109,19 +109,23 @@
 <div class="modal fade" id="addParkingModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg rounded-4">
-            <div class="modal-header bg-dark text-white p-4"><h5 class="modal-title">Додати паркінг</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+            <div class="modal-header bg-dark text-white p-4 rounded-top-4"><h5 class="modal-title text-white fw-bold">Додати паркінг</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
             <div class="modal-body p-4 bg-light">
-                <form id="addParkingForm">
-                    <div class="form-floating mb-3"><input type="text" class="form-control" name="name" required><label>Назва</label></div>
-                    <div class="form-floating mb-3"><input type="text" class="form-control" name="address" required><label>Адреса</label></div>
-                    <div class="form-floating mb-3"><input type="number" step="0.01" class="form-control" name="price_per_hour" value="0.00" required><label>Тариф (грн/год)</label></div>
+                <form id="addParkingForm" enctype="multipart/form-data">
+                    <div class="form-floating mb-3 shadow-sm"><input type="text" class="form-control" name="name" required><label>Назва паркінгу</label></div>
+                    <div class="form-floating mb-3 shadow-sm"><input type="text" class="form-control" name="address" required><label>Адреса</label></div>
+                    <div class="form-floating mb-3 shadow-sm"><input type="number" step="0.01" class="form-control" name="price_per_hour" value="0.00" required><label>Тариф (грн/год)</label></div>
                     <div class="row g-2 mb-3">
-                        <div class="col-6"><div class="form-floating"><input type="number" class="form-control" name="capacity" required><label>Місткість</label></div></div>
-                        <div class="col-6"><div class="form-floating"><input type="number" class="form-control" name="available" required><label>Доступно місць</label></div></div>
+                        <div class="col-6"><div class="form-floating shadow-sm"><input type="number" class="form-control" name="capacity" required><label>Загальна місткість</label></div></div>
+                        <div class="col-6"><div class="form-floating shadow-sm"><input type="number" class="form-control" name="available" required><label>Доступно місць</label></div></div>
+                    </div>
+                    <div class="mb-3 p-3 bg-white rounded-3 shadow-sm border">
+                        <label class="form-label small text-muted fw-bold mb-1">Зображення паркінгу (опціонально)</label>
+                        <input type="file" class="form-control form-control-sm" name="image" accept="image/*">
                     </div>
                 </form>
             </div>
-            <div class="modal-footer border-0 p-4 pt-0 bg-light"><button type="button" class="btn btn-dark w-100 py-2" id="saveParkingBtn">Зберегти</button></div>
+            <div class="modal-footer border-0 p-4 pt-0 bg-light rounded-bottom-4"><button type="button" class="btn btn-dark w-100 py-2 fw-bold" id="saveParkingBtn">Зберегти паркінг</button></div>
         </div>
     </div>
 </div>
@@ -129,20 +133,24 @@
 <div class="modal fade" id="editParkingModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg rounded-4">
-            <div class="modal-header bg-warning p-4"><h5 class="modal-title">Редагувати паркінг</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-header bg-warning p-4 rounded-top-4"><h5 class="modal-title fw-bold">Редагувати паркінг</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body p-4 bg-light">
-                <form id="editParkingForm">
+                <form id="editParkingForm" enctype="multipart/form-data">
                     <input type="hidden" name="id" id="editParkingId">
-                    <div class="form-floating mb-3"><input type="text" class="form-control" name="name" id="editParkingName" required><label>Назва</label></div>
-                    <div class="form-floating mb-3"><input type="text" class="form-control" name="address" id="editParkingAddress" required><label>Адреса</label></div>
-                    <div class="form-floating mb-3"><input type="number" step="0.01" class="form-control" name="price_per_hour" id="editParkingPrice" required><label>Тариф (грн/год)</label></div>
+                    <div class="form-floating mb-3 shadow-sm"><input type="text" class="form-control" name="name" id="editParkingName" required><label>Назва паркінгу</label></div>
+                    <div class="form-floating mb-3 shadow-sm"><input type="text" class="form-control" name="address" id="editParkingAddress" required><label>Адреса</label></div>
+                    <div class="form-floating mb-3 shadow-sm"><input type="number" step="0.01" class="form-control" name="price_per_hour" id="editParkingPrice" required><label>Тариф (грн/год)</label></div>
                     <div class="row g-2 mb-3">
-                        <div class="col-6"><div class="form-floating"><input type="number" class="form-control" name="capacity" id="editParkingCapacity" required><label>Місткість</label></div></div>
-                        <div class="col-6"><div class="form-floating"><input type="number" class="form-control" name="available" id="editParkingAvailable" required><label>Доступно місць</label></div></div>
+                        <div class="col-6"><div class="form-floating shadow-sm"><input type="number" class="form-control" name="capacity" id="editParkingCapacity" required><label>Загальна місткість</label></div></div>
+                        <div class="col-6"><div class="form-floating shadow-sm"><input type="number" class="form-control" name="available" id="editParkingAvailable" required><label>Доступно місць</label></div></div>
+                    </div>
+                    <div class="mb-3 p-3 bg-white rounded-3 shadow-sm border">
+                        <label class="form-label small text-muted fw-bold mb-1">Оновити зображення</label>
+                        <input type="file" class="form-control form-control-sm" name="image" accept="image/*">
                     </div>
                 </form>
             </div>
-            <div class="modal-footer border-0 p-4 pt-0 bg-light"><button type="button" class="btn btn-warning w-100 py-2" id="updateParkingBtn">Оновити</button></div>
+            <div class="modal-footer border-0 p-4 pt-0 bg-light rounded-bottom-4"><button type="button" class="btn btn-warning w-100 py-2 fw-bold" id="updateParkingBtn">Оновити дані</button></div>
         </div>
     </div>
 </div>
@@ -150,11 +158,11 @@
 <div class="modal fade" id="editBookingModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg rounded-4">
-            <div class="modal-header bg-warning p-4"><h5 class="modal-title">Редагувати бронювання</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-header bg-warning p-4 rounded-top-4"><h5 class="modal-title fw-bold">Редагувати бронювання</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body p-4 bg-light">
                 <form id="editBookingForm">
                     <input type="hidden" name="id" id="editBookingId">
-                    <div class="form-floating mb-3">
+                    <div class="form-floating mb-3 shadow-sm">
                         <select class="form-select" name="parking_id" id="editBookingParkingId" required>
                             <?php $parkings_result->data_seek(0); while($row = $parkings_result->fetch_assoc()): ?>
                                 <option value="<?php echo $row['id']; ?>"><?php echo htmlspecialchars($row['name']); ?></option>
@@ -162,17 +170,17 @@
                         </select>
                         <label>Паркінг</label>
                     </div>
-                    <div class="form-floating mb-3">
+                    <div class="form-floating mb-3 shadow-sm">
                         <input type="hidden" name="vehicle_id" id="editBookingVehicleId">
-                        <input type="text" class="form-control" id="editBookingVehiclePlate" readonly>
+                        <input type="text" class="form-control fw-bold" id="editBookingVehiclePlate" readonly>
                         <label>Номер авто</label>
                     </div>
                     <div class="row g-2 mb-3">
-                        <div class="col-6"><div class="form-floating"><input type="datetime-local" class="form-control" name="start_time" id="editBookingStartTime" step="1800" required><label>Початок</label></div></div>
-                        <div class="col-6"><div class="form-floating"><input type="datetime-local" class="form-control" name="end_time" id="editBookingEndTime" step="1800" required><label>Кінець</label></div></div>
+                        <div class="col-6"><div class="form-floating shadow-sm"><input type="datetime-local" class="form-control" name="start_time" id="editBookingStartTime" step="1800" required><label>Початок</label></div></div>
+                        <div class="col-6"><div class="form-floating shadow-sm"><input type="datetime-local" class="form-control" name="end_time" id="editBookingEndTime" step="1800" required><label>Кінець</label></div></div>
                     </div>
-                    <div class="form-floating mb-3">
-                        <select class="form-select" name="status" id="editBookingStatus">
+                    <div class="form-floating mb-3 shadow-sm">
+                        <select class="form-select fw-bold" name="status" id="editBookingStatus">
                             <option value="active">Активне</option>
                             <option value="completed">Завершене</option>
                             <option value="cancelled">Скасоване</option>
@@ -181,7 +189,7 @@
                     </div>
                 </form>
             </div>
-            <div class="modal-footer border-0 p-4 pt-0 bg-light"><button type="button" class="btn btn-warning w-100 py-2" id="updateBookingBtn">Оновити</button></div>
+            <div class="modal-footer border-0 p-4 pt-0 bg-light rounded-bottom-4"><button type="button" class="btn btn-warning w-100 py-2 fw-bold" id="updateBookingBtn">Оновити бронювання</button></div>
         </div>
     </div>
 </div>
